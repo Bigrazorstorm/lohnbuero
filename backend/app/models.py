@@ -153,7 +153,11 @@ class User(Base):
     mandant_portal = relationship("Mandant", back_populates="portal_user", foreign_keys="Mandant.portal_user_id")
     tickets_erstellt = relationship("Ticket", back_populates="erstellt_von", foreign_keys="Ticket.erstellt_von_id")
     ticket_kommentare = relationship("TicketKommentar", back_populates="autor")
-    workflow_items_erledigt = relationship("WorkflowItem", back_populates="erledigt_von")
+    workflow_items_erledigt = relationship(
+        "WorkflowItem",
+        back_populates="erledigt_von",
+        foreign_keys="WorkflowItem.erledigt_von_id"
+    )
     eskalationen = relationship("EskalationLog", back_populates="eskaliert_an", foreign_keys="EskalationLog.eskaliert_an_id")
     dokumente = relationship("Dokument", back_populates="hochgeladen_von")
 
