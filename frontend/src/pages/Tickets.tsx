@@ -14,10 +14,13 @@ const STATUS_LABELS: Record<TicketStatus, string> = {
   offen: 'Offen',
   in_bearbeitung: 'In Bearbeitung',
   wartet_auf_mandant: 'Wartet auf Mandant',
+  wartet_intern: 'Wartet intern',
   intern_in_klaerung: 'Intern in Klärung',
+  in_pruefung: 'In Prüfung',
   beantwortet: 'Beantwortet',
   geloest: 'Gelöst',
   geschlossen: 'Geschlossen',
+  abgebrochen: 'Abgebrochen',
 }
 
 const KATEGORIE_OPTIONS = [

@@ -21,10 +21,13 @@ const ticketColors: Record<TicketStatus, string> = {
   offen: 'bg-orange-100 text-orange-700',
   in_bearbeitung: 'bg-blue-100 text-blue-700',
   wartet_auf_mandant: 'bg-purple-100 text-purple-700',
+  wartet_intern: 'bg-violet-100 text-violet-700',
   intern_in_klaerung: 'bg-indigo-100 text-indigo-700',
+  in_pruefung: 'bg-cyan-100 text-cyan-700',
   beantwortet: 'bg-teal-100 text-teal-700',
   geloest: 'bg-green-100 text-green-700',
   geschlossen: 'bg-gray-100 text-gray-600',
+  abgebrochen: 'bg-red-100 text-red-700',
 }
 
 const ticketLabels: Record<TicketStatus, string> = {
@@ -32,10 +35,13 @@ const ticketLabels: Record<TicketStatus, string> = {
   offen: 'Offen',
   in_bearbeitung: 'In Bearbeitung',
   wartet_auf_mandant: 'Wartet auf Mandant',
+  wartet_intern: 'Wartet intern',
   intern_in_klaerung: 'Intern in Klärung',
+  in_pruefung: 'In Prüfung',
   beantwortet: 'Beantwortet',
   geloest: 'Gelöst',
   geschlossen: 'Geschlossen',
+  abgebrochen: 'Abgebrochen',
 }
 
 const prioritaetColors: Record<TicketPrioritaet, string> = {

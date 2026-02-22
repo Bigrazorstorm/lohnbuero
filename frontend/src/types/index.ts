@@ -22,6 +22,52 @@ export interface UserShort {
 export type MandantKategorie = 'A' | 'B' | 'C'
 export type Abgabeweg = 'email' | 'post' | 'portal' | 'fax'
 
+export interface Fristenprofil {
+  id: number
+  mandant_id: number
+  name: string
+  ist_aktiv: boolean
+  regeln: FristenregelOut[]
+  created_at: string
+}
+
+export interface FristenregelOut {
+  id: number
+  profil_id: number
+  position: number
+  fristart: string
+  regeltyp: FristenRegeltyp
+  regel_config: string
+  bundesland?: string
+  interne_vorfrist_tage: number
+  ist_aktiv: boolean
+}
+
+export interface MandantKontakt {
+  id: number
+  mandant_id: number
+  rolle: MandantKontaktRolle
+  name: string
+  email?: string
+  telefon?: string
+  ist_aktiv: boolean
+  created_at: string
+}
+
+export interface MandantNotiz {
+  id: number
+  mandant_id: number
+  version: number
+  inhalt: string
+  erstellt_von: UserShort
+  created_at: string
+}
+
+export interface BlockerIndikator {
+  typ: string
+  beschreibung: string
+}
+
 export interface Mandant {
   id: number
   nummer?: string
