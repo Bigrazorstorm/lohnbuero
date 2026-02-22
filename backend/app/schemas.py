@@ -625,9 +625,11 @@ class WorkflowItemOut(BaseModel):
     position: int
     titel: str
     beschreibung: Optional[str] = None
+    schritttyp: Optional[str] = None
     verantwortlich_rolle: Optional[UserRole] = None
     zugewiesen_an: Optional[UserShort] = None
     faellig_datum: Optional[datetime] = None
+    sla_warnung_ab: Optional[datetime] = None
     ist_pflicht: bool
     erfordert_dokument: bool
     erfordert_pruefung: bool
@@ -635,10 +637,15 @@ class WorkflowItemOut(BaseModel):
     status: ChecklistItemStatus
     erledigt_am: Optional[datetime] = None
     erledigt_von: Optional[UserShort] = None
+    started_at: Optional[datetime] = None
+    actual_duration_minuten: Optional[int] = None
     notiz: Optional[str] = None
     punkte: float = 0.0
     ist_blockiert: bool = False
     blockiert_grund: Optional[str] = None
+    blockierung_seit: Optional[datetime] = None
+    ist_ueberfaellig: bool = False
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -654,6 +661,12 @@ class WorkflowInstanzOut(BaseModel):
     ampelstatus: Ampelstatus
     sachbearbeiter: Optional[UserShort] = None
     pruefer: Optional[UserShort] = None
+    
+    # SLA tracking
+    sla_deadline: Optional[datetime] = None
+    sla_status: Optional[str] = None
+    
+    # Key process steps (backward compat)
     unterlagen_eingegangen_am: Optional[datetime] = None
     unterlagen_eingegangen_von: Optional[UserShort] = None
     unterlagen_faellig: Optional[datetime] = None
@@ -675,9 +688,15 @@ class WorkflowInstanzOut(BaseModel):
     abgeschlossen_am: Optional[datetime] = None
     abgeschlossen_von: Optional[UserShort] = None
     abgeschlossen_faellig: Optional[datetime] = None
+    
+    # Time tracking
     notizen: Optional[str] = None
     punkte: float = 0.0
     created_at: datetime
+    started_at: Optional[datetime] = None
+    durchlaufzeit_stunden: Optional[float] = None
+    verzoegerung_tage: Optional[int] = None
+    
     items: List[WorkflowItemOut] = []
 
     model_config = {"from_attributes": True}

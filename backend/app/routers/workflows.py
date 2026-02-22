@@ -17,6 +17,7 @@ from app.schemas import (
     WorkflowInstanzUpdate, WorkflowItemUpdate, WorkflowItemOut,
     WorkflowVorlageCreate, WorkflowVorlageOut, WorkflowVorlageUpdate,
 )
+from app.workflow_service import WorkflowService
 
 router = APIRouter(prefix="/api/workflows", tags=["workflows"])
 
@@ -127,11 +128,12 @@ def create_workflow(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
+    """Create a new workflow instance from template with smart deadline calculation."""
     mandant = db.query(Mandant).filter(Mandant.id == data.mandant_id).first()
     if not mandant:
         raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
 
-    # Check duplicate
+    # Check for duplicate
     existing = db.query(WorkflowInstanz).filter(
         WorkflowInstanz.mandant_id == data.mandant_id,
         WorkflowInstanz.monat == data.monat,
@@ -140,66 +142,43 @@ def create_workflow(
     if existing:
         raise HTTPException(status_code=400, detail="Workflow für diesen Monat bereits vorhanden")
 
-    instanz = WorkflowInstanz(
-        mandant_id=data.mandant_id,
-        vorlage_id=data.vorlage_id,
-        monat=data.monat,
-        jahr=data.jahr,
-        sachbearbeiter_id=data.sachbearbeiter_id or mandant.sachbearbeiter_id,
-        pruefer_id=data.pruefer_id,
-        notizen=data.notizen,
-    )
-    db.add(instanz)
-    db.flush()
-
-    # Create items from template
-    vorlage_id = data.vorlage_id
-    if not vorlage_id:
-        vorlage = db.query(WorkflowVorlage).filter(WorkflowVorlage.ist_standard == True).first()
-        if vorlage:
-            vorlage_id = vorlage.id
-
-    if vorlage_id:
-        vorlage_items = (
-            db.query(WorkflowVorlageItem)
-            .filter(WorkflowVorlageItem.vorlage_id == vorlage_id)
-            .order_by(WorkflowVorlageItem.position)
-            .all()
+    # Use WorkflowService to create workflow with calculated deadlines
+    service = WorkflowService(db)
+    try:
+        instanz = service.create_workflow_from_template(
+            mandant_id=data.mandant_id,
+            vorlage_id=data.vorlage_id,
+            monat=data.monat,
+            jahr=data.jahr,
+            sachbearbeiter_id=data.sachbearbeiter_id,
+            pruefer_id=data.pruefer_id,
         )
-        month_start = datetime(data.jahr, data.monat, 1)
-        for vi in vorlage_items:
-            faellig = month_start + timedelta(days=vi.faellig_offset_tage) if vi.faellig_offset_tage else None
-            item = WorkflowItem(
-                instanz_id=instanz.id,
-                vorlage_item_id=vi.id,
-                position=vi.position,
-                titel=vi.titel,
-                beschreibung=vi.beschreibung,
-                verantwortlich_rolle=vi.verantwortlich_rolle,
-                faellig_datum=faellig,
-                ist_pflicht=vi.ist_pflicht,
-                erfordert_dokument=vi.erfordert_dokument,
-                erfordert_pruefung=vi.erfordert_pruefung,
-            )
-            db.add(item)
-
-    audit_service.log(
-        db,
-        objekt_typ="workflow",
-        objekt_id=instanz.id,
-        mandant_id=instanz.mandant_id,
-        monat=instanz.monat,
-        jahr=instanz.jahr,
-        aktionstyp="generiert",
-        benutzer_id=current_user.id,
-        benutzerrolle=current_user.role.value,
-        neuer_wert={"monat": instanz.monat, "jahr": instanz.jahr},
-        ip_adresse=request.client.host if request.client else None,
-        beschreibung=f"Workflow {instanz.monat}/{instanz.jahr} für Mandant {instanz.mandant_id} erstellt",
-    )
-    db.commit()
-    db.refresh(instanz)
-    return instanz
+        
+        # Set notes if provided
+        if data.notizen:
+            instanz.notizen = data.notizen
+        
+        db.commit()
+        db.refresh(instanz)
+        
+        audit_service.log(
+            db,
+            objekt_typ="workflow",
+            objekt_id=instanz.id,
+            mandant_id=instanz.mandant_id,
+            monat=instanz.monat,
+            jahr=instanz.jahr,
+            aktionstyp="erstellt",
+            benutzer_id=current_user.id,
+            benutzerrolle=current_user.role.value,
+            neuer_wert={"monat": instanz.monat, "jahr": instanz.jahr, "sla_deadline": instanz.sla_deadline.isoformat() if instanz.sla_deadline else None},
+            ip_adresse=request.client.host if request.client else None,
+            beschreibung=f"Workflow {instanz.monat}/{instanz.jahr} für Mandant {instanz.mandant_id} erstellt (mit SLA-Berechnung)",
+        )
+        
+        return instanz
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 
 @router.get("/{instanz_id}", response_model=WorkflowInstanzOut)
@@ -228,15 +207,17 @@ def update_workflow(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_staff),
 ):
+    """Update a workflow instance with enhanced validation and service integration."""
     instanz = db.query(WorkflowInstanz).filter(WorkflowInstanz.id == instanz_id).first()
     if not instanz:
         raise HTTPException(status_code=404, detail="Workflow nicht gefunden")
 
+    service = WorkflowService(db)
     update_data = data.model_dump(exclude_unset=True)
     old_status = instanz.status
     new_status = update_data.get("status")
 
-    # Kernel process step keys and their corresponding "von" fields
+    # ── Determine step type (kernel process vs item) ─────────────────────────
     KERNEL_PROCESS_KEYS = {
         'unterlagen_eingegangen_am': 'unterlagen_eingegangen_von_id',
         'probe_abrechnung_am': 'probe_abrechnung_von_id',
@@ -247,48 +228,44 @@ def update_workflow(
         'abgeschlossen_am': 'abgeschlossen_von_id'
     }
 
-    # Detect if this is a kernel process step update
     kernel_updates = {k: v for k, v in update_data.items() if k in KERNEL_PROCESS_KEYS}
     is_kernel_update = bool(kernel_updates)
 
-    # Set erledigt_von when completing a kernel process step
+    # ── Set "von" user for kernel process steps ──────────────────────────────
     if is_kernel_update:
         for key, value in kernel_updates.items():
             von_field = KERNEL_PROCESS_KEYS[key]
             if value is not None:
-                # Setting the step - also set who did it
                 update_data[von_field] = current_user.id
             else:
-                # Clearing the step - also clear who did it
                 update_data[von_field] = None
 
-    # ── Month-end closing validation ─────────────────────────
+    # ── Closing validation ───────────────────────────────────────────────────
     if new_status == WorkflowStatus.ABGESCHLOSSEN and old_status != WorkflowStatus.ABGESCHLOSSEN:
-        errors = _validate_monatsabschluss(db, instanz)
-        if errors:
+        can_close, errors = service.validate_can_close(instanz)
+        if not can_close:
             raise HTTPException(
                 status_code=400,
                 detail={"message": "Monatsabschluss nicht möglich", "fehler": errors},
             )
         update_data["abgeschlossen_am"] = datetime.utcnow()
 
-    # ── Re-open requires a reason ─────────────────────────────
+    # ── Re-opening logic ─────────────────────────────────────────────────────
     if old_status == WorkflowStatus.ABGESCHLOSSEN and new_status and new_status != WorkflowStatus.ABGESCHLOSSEN:
         begruendung = update_data.get("wiedereroeffnet_begruendung") or instanz.wiedereroeffnet_begruendung
         if not begruendung:
             raise HTTPException(status_code=400, detail="Begründung für Wiederöffnung erforderlich")
         update_data["wiedereroeffnet_am"] = datetime.utcnow()
 
+    # ── Apply updates ────────────────────────────────────────────────────────
     for k, v in update_data.items():
         setattr(instanz, k, v)
 
-    # Determine action type based on what was updated
+    # ── Automatically update ampel status ────────────────────────────────────
+    service.update_ampel_status_with_log(instanz_id)
+
+    # ── Audit logging ────────────────────────────────────────────────────────
     if is_kernel_update:
-        # Get old values for kernel process steps
-        old_kernel_values = {k: getattr(instanz, k, None) for k in KERNEL_PROCESS_KEYS}
-        # Remove None values
-        old_kernel_values = {k: v for k, v in old_kernel_values.items() if v is not None}
-        
         audit_service.log(
             db,
             objekt_typ="workflow",
@@ -299,10 +276,9 @@ def update_workflow(
             aktionstyp="kernprozess",
             benutzer_id=current_user.id,
             benutzerrolle=current_user.role.value,
-            alter_wert=old_kernel_values if old_kernel_values else None,
             neuer_wert=kernel_updates,
             ip_adresse=request.client.host if request.client else None,
-            beschreibung=f"Kernprozess aktualisiert für Workflow {instanz.monat}/{instanz.jahr}",
+            beschreibung=f"Kernprozess-Schritte aktualisiert für Workflow {instanz.monat}/{instanz.jahr}",
         )
     else:
         audit_service.log(
@@ -318,41 +294,12 @@ def update_workflow(
             alter_wert={"status": old_status} if new_status else None,
             neuer_wert=update_data,
             ip_adresse=request.client.host if request.client else None,
-            beschreibung=f"Workflow {instanz.monat}/{instanz.jahr} geändert",
+            beschreibung=f"Workflow {instanz.monat}/{instanz.jahr} aktualisiert",
         )
+    
     db.commit()
     db.refresh(instanz)
     return instanz
-
-
-def _validate_monatsabschluss(db: Session, instanz: WorkflowInstanz) -> list:
-    """Return list of blocking errors for month-end closing."""
-    errors = []
-
-    # 1. All mandatory workflow items must be done
-    open_pflicht = [
-        i for i in instanz.items
-        if i.ist_pflicht and i.status != ChecklistItemStatus.ERLEDIGT
-    ]
-    if open_pflicht:
-        errors.append(f"{len(open_pflicht)} Pflicht-Schritte noch nicht erledigt")
-
-    # 2. If a prüfer is set, the proof step must be confirmed
-    if instanz.pruefer_id and not instanz.probe_geprueft_am:
-        errors.append("4-Augen-Prüfung noch nicht abgeschlossen")
-
-    # 3. No open critical tickets for this workflow's month
-    kritische_offen = db.query(Ticket).filter(
-        Ticket.mandant_id == instanz.mandant_id,
-        Ticket.monat == instanz.monat,
-        Ticket.jahr == instanz.jahr,
-        Ticket.prioritaet == TicketPrioritaet.KRITISCH,
-        Ticket.status.in_(list(_OPEN_TICKET_STATUSES)),
-    ).count()
-    if kritische_offen:
-        errors.append(f"{kritische_offen} kritische Ticket(s) noch offen")
-
-    return errors
 
 
 # ─── Workflow Items (Checklist) ───────────────────────────────
@@ -462,12 +409,13 @@ def bulk_create_monthly(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_teamleitung),
 ):
-    """Create workflows for all active mandanten for a given month."""
+    """Create workflows for ALL active mandants for a given month with smart deadline calculation."""
+    service = WorkflowService(db)
     mandanten = db.query(Mandant).filter(Mandant.ist_aktiv == True).all()
-    standard_vorlage = db.query(WorkflowVorlage).filter(WorkflowVorlage.ist_standard == True).first()
 
     created = []
     for mandant in mandanten:
+        # Skip if workflow already exists
         existing = db.query(WorkflowInstanz).filter(
             WorkflowInstanz.mandant_id == mandant.id,
             WorkflowInstanz.monat == monat,
@@ -476,50 +424,37 @@ def bulk_create_monthly(
         if existing:
             continue
 
-        instanz = WorkflowInstanz(
-            mandant_id=mandant.id,
-            vorlage_id=standard_vorlage.id if standard_vorlage else None,
-            monat=monat,
-            jahr=jahr,
-            sachbearbeiter_id=mandant.sachbearbeiter_id,
-        )
-        db.add(instanz)
-        db.flush()
-
-        if standard_vorlage:
-            month_start = datetime(jahr, monat, 1)
-            for vi in standard_vorlage.items:
-                faellig = month_start + timedelta(days=vi.faellig_offset_tage) if vi.faellig_offset_tage else None
-                item = WorkflowItem(
-                    instanz_id=instanz.id,
-                    vorlage_item_id=vi.id,
-                    position=vi.position,
-                    titel=vi.titel,
-                    beschreibung=vi.beschreibung,
-                    verantwortlich_rolle=vi.verantwortlich_rolle,
-                    faellig_datum=faellig,
-                    ist_pflicht=vi.ist_pflicht,
-                    erfordert_dokument=vi.erfordert_dokument,
-                    erfordert_pruefung=vi.erfordert_pruefung,
-                )
-                db.add(item)
-
-        audit_service.log(
-            db,
-            objekt_typ="workflow",
-            objekt_id=instanz.id,
-            mandant_id=mandant.id,
-            monat=monat,
-            jahr=jahr,
-            aktionstyp="bulk_generiert",
-            benutzer_id=current_user.id,
-            benutzerrolle=current_user.role.value,
-            beschreibung=f"Workflow {monat}/{jahr} per Bulk für Mandant {mandant.id} erstellt",
-        )
-        created.append(instanz)
+        try:
+            instanz = service.create_workflow_from_template(
+                mandant_id=mandant.id,
+                vorlage_id=None,  # Will find suitable template
+                monat=monat,
+                jahr=jahr,
+                sachbearbeiter_id=mandant.sachbearbeiter_id,
+            )
+            
+            audit_service.log(
+                db,
+                objekt_typ="workflow",
+                objekt_id=instanz.id,
+                mandant_id=mandant.id,
+                monat=monat,
+                jahr=jahr,
+                aktionstyp="bulk_erstellt",
+                benutzer_id=current_user.id,
+                benutzerrolle=current_user.role.value,
+                beschreibung=f"Workflow {monat}/{jahr} per Bulk für Mandant {mandant.id} erstellt",
+            )
+            
+            created.append(instanz)
+        except Exception as e:
+            # Log error but continue with other mandants
+            print(f"Error creating workflow for mandant {mandant.id}: {str(e)}")
+            continue
 
     db.commit()
     for inst in created:
         db.refresh(inst)
 
     return created
+

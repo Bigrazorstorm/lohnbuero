@@ -123,6 +123,36 @@ class MandantKontaktRolle(str, enum.Enum):
     UPLOAD_REMINDER = "upload_reminder"
 
 
+class BrancheTyp(str, enum.Enum):
+    INDUSTRIE = "industrie"
+    HANDEL = "handel"
+    HANDWERK = "handwerk"
+    FREIBERUFLER = "freiberufler"
+    GESUNDHEIT = "gesundheit"
+    DIENSTLEISTUNGEN = "dienstleistungen"
+    BAUWIRTSCHAFT = "bauwirtschaft"
+    LANDWIRTSCHAFT = "landwirtschaft"
+    SONSTIGE = "sonstige"
+
+
+class WorkflowSchrittTyp(str, enum.Enum):
+    DATENERFASSUNG = "datenerfassung"
+    PRUEFER_PFLICHT = "pruefer_pflicht"  # requires 4-eyes
+    ABSCHLUSSFRIST = "abschlussfrist"  # links to external deadline
+    UPLOAD = "upload"  # requires document
+    GENEHMIGUNG = "genehmigung"  # approval step
+    BERECHNUNG = "berechnung"  # calculation step
+    VERSAND = "versand"  # delivery step
+    VERARBEITUNG = "verarbeitung"  # generic processing
+
+
+class AmpelRegelTyp(str, enum.Enum):
+    UEBERFAELLIG = "ueberfaellig"  # days overdue = red
+    WARNUNG = "warnung"  # days until deadline = yellow
+    KRITISCHES_TICKET = "kritisches_ticket"  # critical tickets = red
+    BLOCKIERT = "blockiert"  # blocked by dependency
+
+
 # ─────────────────────────────────────────
 # User
 # ─────────────────────────────────────────
@@ -220,6 +250,87 @@ class Mandant(Base):
     fristenprofil = relationship("Fristenprofil", foreign_keys=[fristenprofil_id], uselist=False)
     kontakte = relationship("MandantKontakt", back_populates="mandant")
     notizen = relationship("MandantNotiz", back_populates="mandant", order_by="MandantNotiz.version")
+
+
+# ─────────────────────────────────────────
+# Branche Profile (branch-specific configurations)
+# ─────────────────────────────────────────
+
+class Branche(Base):
+    __tablename__ = "branchen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, unique=True)
+    typ = Column(Enum(BrancheTyp), nullable=False)
+    beschreibung = Column(Text)
+    
+    # Standard deadline for payroll submission day of month
+    # E.g., industry: 10th, trade: 15th
+    lohnabschluss_standardtag = Column(Integer, default=10)
+    
+    # SLA warning threshold (days before deadline)
+    sla_warnung_tage = Column(Integer, default=2)
+    
+    # Configuration for this branch (JSON)
+    # { "requiresAuditTrail": true, "requiresSignature": false, ... }
+    konfiguration = Column(Text, nullable=True)
+    
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    mandanten = relationship("Mandant", secondary=mandant_branchen, back_populates="branchen_liste")
+    workflow_vorlagen = relationship("WorkflowVorlage", back_populates="branche")
+    fristenprofile = relationship("BrancheFristenprofil", back_populates="branche")
+
+
+class BrancheFristenprofil(Base):
+    """Branch-specific deadline profile with variability rules."""
+    __tablename__ = "branche_fristenprofile"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branche_id = Column(Integer, ForeignKey("branchen.id"), nullable=False)
+    name = Column(String(255), nullable=False)
+    beschreibung = Column(Text)
+    ist_standard = Column(Boolean, default=False)
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    branche = relationship("Branche", back_populates="fristenprofile")
+    fristen = relationship("BrancheFrist", back_populates="profil", order_by="BrancheFrist.position")
+
+
+class BrancheFrist(Base):
+    """Specific deadline (Frist) for a branch profile."""
+    __tablename__ = "branche_fristen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profil_id = Column(Integer, ForeignKey("branche_fristenprofile.id"), nullable=False)
+    position = Column(Integer, nullable=False)
+    
+    # E.g., "SV-Meldung", "Lohnsteuer-Zahlung", "Abrechnungsunterlagen"
+    bezeichnung = Column(String(255), nullable=False)
+    
+    # Rule type for calculation
+    regeltyp = Column(Enum(FristenRegeltyp), nullable=False)
+    
+    # JSON config specific to rule type
+    # FIXES_DATUM: { "tag": 15, "monat": 1 }
+    # RELATIV_MONATSENDE: { "tage_nach_monatsende": -5 }
+    # RELATIV_BANKARBEITSTAGE: { "bankarbeitstage_nach_zahlungsgruppe3": 1 }
+    regelkonfiguration = Column(Text, nullable=False)
+    
+    # Optional: internal advance notice (tage vor Deadline
+    interne_vorfrist_tage = Column(Integer, default=0)
+    
+    # Which workflow items should use this deadline?
+    # JSON: ["workflow_vorlage_item_id_1", "workflow_vorlage_item_id_2"]
+    zugeordnete_items = Column(Text, nullable=True)
+    
+    ist_aktiv = Column(Boolean, default=True)
+    
+    profil = relationship("BrancheFristenprofil", back_populates="fristen")
 
 
 # ─────────────────────────────────────────
@@ -354,13 +465,22 @@ class WorkflowVorlage(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False)
     beschreibung = Column(Text)
-    branche = Column(String(100))  # optional branche filter
+    branche_typ = Column(Enum(BrancheTyp), nullable=True)  # target branch type
+    branche_id = Column(Integer, ForeignKey("branchen.id"), nullable=True)  # specific branch
     ist_standard = Column(Boolean, default=False)
     ist_onboarding = Column(Boolean, default=False)
+    kategorie = Column(Enum(MandantKategorie), nullable=True)  # A/B/C - filter by complexity
+    
+    # SLA configuration for this workflow
+    # JSON: { "gesamtdauer_tage": 30, "warnung_tage": 5 }
+    sla_konfiguration = Column(Text, nullable=True)
+    
     erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    is_archiviert = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-
-    items = relationship("WorkflowVorlageItem", back_populates="vorlage", order_by="WorkflowVorlageItem.position")
+    
+    branche = relationship("Branche", back_populates="workflow_vorlagen", foreign_keys=[branche_id])
+    items = relationship("WorkflowVorlageItem", back_populates="vorlage", order_by="WorkflowVorlageItem.position", cascade="all, delete-orphan")
     instanzen = relationship("WorkflowInstanz", back_populates="vorlage")
 
 
@@ -372,16 +492,34 @@ class WorkflowVorlageItem(Base):
     position = Column(Integer, nullable=False)
     titel = Column(String(255), nullable=False)
     beschreibung = Column(Text)
-    verantwortlich_rolle = Column(Enum(UserRole))
+    schritttyp = Column(Enum(WorkflowSchrittTyp), default=WorkflowSchrittTyp.VERARBEITUNG)
+    
+    # Assignment & Responsibility
+    verantwortlich_rolle = Column(Enum(UserRole))  # if None, free assignment
+    
+    # Deadline configuration
     faellig_offset_tage = Column(Integer, default=0)  # days after month start
-    ist_kernprozess = Column(Boolean, default=False)  # kernel process step (replaces hardcoded fields)
     ist_pflicht = Column(Boolean, default=True)
     ist_optional_pro_mandant = Column(Boolean, default=False)  # can be activated per mandant
+    
+    # Dokumentation & Prüfung
     erfordert_dokument = Column(Boolean, default=False)
     erfordert_pruefung = Column(Boolean, default=False)  # 4-eyes
-    fristart_referenz = Column(String(100), nullable=True)  # e.g. "SV-Zahlung", links to Fristart
+    
+    # Fristen integration
+    fristart_referenz = Column(String(100), nullable=True)  # e.g. "SV-Zahlung", links to BrancheFrist
     fristart_offset_tage = Column(Integer, default=0)  # offset from the referenced deadline (negative = before)
-    standard_punkte = Column(Float, default=1.0)  # default points for this step
+    
+    # Dependency management
+    # JSON: ["item_id_1", "item_id_2"] - must be completed before this step
+    abhaengig_von_items = Column(Text, nullable=True)
+    
+    # Points system
+    standard_punkte = Column(Float, default=1.0)
+    
+    # Blocking rules
+    # JSON: { "kritisches_ticket_bricht": true, "blockt_abschluss": true }
+    blockier_konfiguration = Column(Text, nullable=True)
 
     vorlage = relationship("WorkflowVorlage", back_populates="items")
 
@@ -398,13 +536,21 @@ class WorkflowInstanz(Base):
     vorlage_id = Column(Integer, ForeignKey("workflow_vorlagen.id"), nullable=True)
     monat = Column(Integer, nullable=False)   # 1-12
     jahr = Column(Integer, nullable=False)
+    
+    # Workflow status & visibility
     status = Column(Enum(WorkflowStatus), default=WorkflowStatus.OFFEN)
     ampelstatus = Column(Enum(Ampelstatus), default=Ampelstatus.GRUEN)
+    last_ampel_update = Column(DateTime, nullable=True)
 
+    # Team assignments
     sachbearbeiter_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     pruefer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    # Timestamps for key process steps
+    # SLA & Deadline tracking
+    sla_deadline = Column(DateTime, nullable=True)  # calculated from branche + fristen
+    sla_status = Column(String(50), default="gruen")  # gruen/gelb/rot
+    
+    # Timestamps for key process steps (backward compat)
     unterlagen_eingegangen_am = Column(DateTime, nullable=True)
     unterlagen_eingegangen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     unterlagen_faellig = Column(DateTime, nullable=True)
@@ -426,10 +572,23 @@ class WorkflowInstanz(Base):
     abgeschlossen_am = Column(DateTime, nullable=True)
     abgeschlossen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     abgeschlossen_faellig = Column(DateTime, nullable=True)
+    
+    # Re-open tracking
     wiedereroeffnet_am = Column(DateTime, nullable=True)
     wiedereroeffnet_begruendung = Column(Text, nullable=True)
 
+    # Notes & metadata
     notizen = Column(Text)
+    punkte = Column(Float, default=0.0)
+    
+    # Time tracking
+    created_at = Column(DateTime, default=datetime.utcnow)
+    started_at = Column(DateTime, nullable=True)  # when actually started
+    durchlaufzeit_stunden = Column(Float, nullable=True)  # calculated after completion
+    
+    # Estimated vs actual
+    geschaetzte_dauer_tage = Column(Integer, nullable=True)  # estimated from SLA config
+    verzoegerung_tage = Column(Integer, nullable=True)  # delay after SLA deadline
     punkte = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -458,23 +617,50 @@ class WorkflowItem(Base):
     instanz_id = Column(Integer, ForeignKey("workflow_instanzen.id"), nullable=False)
     vorlage_item_id = Column(Integer, ForeignKey("workflow_vorlage_items.id"), nullable=True)
     position = Column(Integer, nullable=False)
+    
+    # Task details
     titel = Column(String(255), nullable=False)
     beschreibung = Column(Text)
+    schritttyp = Column(Enum(WorkflowSchrittTyp), default=WorkflowSchrittTyp.VERARBEITUNG)
+    
+    # Assignment
     verantwortlich_rolle = Column(Enum(UserRole))
     zugewiesen_an_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    
+    # Deadline & SLA
     faellig_datum = Column(DateTime, nullable=True)
+    sla_warnung_ab = Column(DateTime, nullable=True)  # warning deadline (e.g., 2 days before due)
+    
+    # Attributes
     ist_pflicht = Column(Boolean, default=True)
     erfordert_dokument = Column(Boolean, default=False)
-    erfordert_pruefung = Column(Boolean, default=False)
-    fristart_referenz = Column(String(100), nullable=True)  # links to Fristart for deadline coupling
+    erfordert_pruefung = Column(Boolean, default=False)  # 4-eyes principle
+    fristart_referenz = Column(String(100), nullable=True)  # links to deadline rule
 
+    # Status & completion
     status = Column(Enum(ChecklistItemStatus), default=ChecklistItemStatus.OFFEN)
     erledigt_am = Column(DateTime, nullable=True)
     erledigt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    notiz = Column(Text)
-    punkte = Column(Float, default=0.0)
+    started_at = Column(DateTime, nullable=True)  # when work actually started
+    actual_duration_minuten = Column(Integer, nullable=True)  # actual time spent
+    
+    # Blocking management
     ist_blockiert = Column(Boolean, default=False)
     blockiert_grund = Column(String(255), nullable=True)  # e.g. "Wartet auf Ticket #12"
+    blockierung_seit = Column(DateTime, nullable=True)
+    
+    # Dependencies
+    # JSON: ["item_id_1", "item_id_2"] - parent items that must be done first
+    abhaengig_von_items = Column(Text, nullable=True)
+    
+    # Metadata
+    notiz = Column(Text)
+    punkte = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Ampel-relevant
+    ist_ueberfaellig = Column(Boolean, default=False)
+    last_ampel_check = Column(DateTime, nullable=True)
 
     instanz = relationship("WorkflowInstanz", back_populates="items")
     zugewiesen_an = relationship("User", foreign_keys=[zugewiesen_an_id])
