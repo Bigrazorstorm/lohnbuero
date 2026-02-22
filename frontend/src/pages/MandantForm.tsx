@@ -10,9 +10,10 @@ interface Props {
   onClose: () => void
   loading?: boolean
   initial?: Record<string, unknown>
+  isEdit?: boolean
 }
 
-export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loading, initial }: Props) {
+export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loading, initial, isEdit }: Props) {
   const [form, setForm] = useState({
     name: '',
     nummer: '',
@@ -28,6 +29,7 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
     sachbearbeiter_id: '',
     vertretung_id: '',
     monatspauschale: '',
+    aenderung_zum: '',
     ...initial,
   })
 
@@ -53,6 +55,7 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
       sachbearbeiter_id: form.sachbearbeiter_id ? Number(form.sachbearbeiter_id) : null,
       vertretung_id: form.vertretung_id ? Number(form.vertretung_id) : null,
       monatspauschale: form.monatspauschale ? Number(form.monatspauschale) : null,
+      aenderung_zum: form.aenderung_zum ? new Date(form.aenderung_zum as string) : null,
     }
     if (!payload.nummer) delete payload.nummer
     onSubmit(payload)
@@ -67,7 +70,7 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b">
-          <h2 className="text-lg font-semibold">Neuer Mandant</h2>
+          <h2 className="text-lg font-semibold">{isEdit ? 'Mandant bearbeiten' : 'Neuer Mandant'}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600"><X size={20} /></button>
         </div>
 
@@ -173,6 +176,16 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
               <textarea className="input h-20 resize-none" value={form.besonderheiten as string}
                 onChange={e => set('besonderheiten', e.target.value)} />
             </div>
+            {isEdit && (
+              <div className="col-span-2">
+                <label className="label">Änderung zum (optional)</label>
+                <input type="date" className="input" value={form.aenderung_zum as string}
+                  onChange={e => set('aenderung_zum', e.target.value)} />
+                <p className="text-xs text-gray-500 mt-1">
+                  Wenn gesetzt, wird die Änderung erst zu diesem Datum wirksam
+                </p>
+              </div>
+            )}
           </div>
         </form>
 
@@ -187,7 +200,7 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
               form?.requestSubmit()
             }}
           >
-            {loading ? 'Speichern...' : 'Mandant anlegen'}
+            {loading ? 'Speichern...' : (isEdit ? 'Aktualisieren' : 'Mandant anlegen')}
           </button>
         </div>
       </div>

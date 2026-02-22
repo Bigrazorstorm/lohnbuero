@@ -177,6 +177,30 @@ class Mandant(Base):
     eskalationen = relationship("EskalationLog", back_populates="mandant")
     email_logs = relationship("EmailLog", back_populates="mandant")
     branchen_liste = relationship("Branche", secondary=mandant_branchen, back_populates="mandanten")
+    aenderungen = relationship("MandantAenderung", back_populates="mandant", order_by="MandantAenderung.erstellt_am")
+
+
+# ─────────────────────────────────────────
+# Mandant Änderungen (geplante Änderungen)
+# ─────────────────────────────────────────
+
+class MandantAenderung(Base):
+    __tablename__ = "mandant_aenderungen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
+    aenderung_zum = Column(DateTime, nullable=True)  # None = sofort wirksam
+    status = Column(String, default="geplant")  # geplant, aktiviert, abgebrochen
+    aenderungen = Column(Text, nullable=False)  # JSON der geänderten Felder
+    erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    erstellt_am = Column(DateTime, default=datetime.utcnow)
+    aktiviert_am = Column(DateTime, nullable=True)
+    abgebrochen_am = Column(DateTime, nullable=True)
+    abgebrochen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+
+    mandant = relationship("Mandant", backref="aenderungen")
+    erstellt_von = relationship("User", foreign_keys=[erstellt_von_id])
+    abgebrochen_von = relationship("User", foreign_keys=[abgebrochen_von_id])
 
 
 # ─────────────────────────────────────────

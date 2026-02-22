@@ -1,10 +1,11 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, Plus, Edit3, Phone, Mail, User } from 'lucide-react'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import toast from 'react-hot-toast'
-import { mandantenApi, workflowsApi } from '../api/client'
+import { mandantenApi, workflowsApi, usersApi } from '../api/client'
 import type { Mandant, WorkflowInstanzShort } from '../types'
 import { KategorieBadge, WorkflowStatusBadge } from '../components/StatusBadge'
 import Ampel from '../components/Ampel'
@@ -13,6 +14,7 @@ export default function MandantDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const qc = useQueryClient()
+  const [showEdit, setShowEdit] = useState(false)
 
   const { data: mandant, isLoading } = useQuery<Mandant>({
     queryKey: ['mandant', id],
@@ -22,6 +24,11 @@ export default function MandantDetail() {
   const { data: workflows = [] } = useQuery<WorkflowInstanzShort[]>({
     queryKey: ['workflows', { mandant_id: id }],
     queryFn: () => workflowsApi.list({ mandant_id: id }).then((r) => (r as { data: WorkflowInstanzShort[] }).data),
+  })
+
+  const { data: users = [] } = useQuery({
+    queryKey: ['users'],
+    queryFn: () => usersApi.list().then((r) => (r as { data: any[] }).data),
   })
 
   const createWorkflowMutation = useMutation({
@@ -41,6 +48,17 @@ export default function MandantDetail() {
       const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       toast.error(msg ?? 'Fehler')
     },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: (data: unknown) => mandantenApi.update(Number(id), data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['mandant', id] })
+      qc.invalidateQueries({ queryKey: ['mandanten'] })
+      toast.success('Mandant aktualisiert')
+      setShowEdit(false)
+    },
+    onError: () => toast.error('Fehler beim Aktualisieren'),
   })
 
   if (isLoading) return <div className="text-gray-400 text-center py-12">Laden…</div>
@@ -66,6 +84,10 @@ export default function MandantDetail() {
             {mandant.nummer && `#${mandant.nummer} · `}{mandant.branche}
           </p>
         </div>
+        <button className="btn-secondary" onClick={() => setShowEdit(true)}>
+          <Edit3 size={16} />
+          Bearbeiten
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-5">
@@ -96,6 +118,42 @@ export default function MandantDetail() {
               </div>
             )}
           </div>
+
+          {/* Geplante Änderungen */}
+          {mandant.aenderungen && mandant.aenderungen.length > 0 && (
+            <div className="card">
+              <h2 className="text-base font-semibold text-gray-900 mb-4">Geplante Änderungen</h2>
+              <div className="space-y-3">
+                {mandant.aenderungen.map((aenderung) => (
+                  <div key={aenderung.id} className="p-3 bg-blue-50 rounded-lg border border-blue-100">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`badge ${
+                        aenderung.status === 'geplant' ? 'bg-yellow-100 text-yellow-700' :
+                        aenderung.status === 'aktiviert' ? 'bg-green-100 text-green-700' :
+                        'bg-red-100 text-red-700'
+                      }`}>
+                        {aenderung.status}
+                      </span>
+                      {aenderung.aenderung_zum && (
+                        <span className="text-sm text-gray-600">
+                          Zum: {format(new Date(aenderung.aenderung_zum), 'dd.MM.yyyy', { locale: de })}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-700">
+                      Erstellt von {aenderung.erstellt_von.full_name} am {format(new Date(aenderung.erstellt_am), 'dd.MM.yyyy', { locale: de })}
+                    </p>
+                    <details className="mt-2">
+                      <summary className="text-sm font-medium text-blue-700 cursor-pointer">Änderungen anzeigen</summary>
+                      <pre className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">
+                        {JSON.stringify(JSON.parse(aenderung.aenderungen), null, 2)}
+                      </pre>
+                    </details>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Workflow history */}
           <div className="card">
@@ -158,6 +216,18 @@ export default function MandantDetail() {
           </div>
         </div>
       </div>
+
+      {/* Edit form modal */}
+      {showEdit && (
+        <MandantForm
+          sachbearbeiterList={users.filter((u: any) => u.role === 'sachbearbeiter' || u.role === 'teamleitung')}
+          onSubmit={(data) => updateMutation.mutate(data)}
+          onClose={() => setShowEdit(false)}
+          loading={updateMutation.isPending}
+          initial={mandant}
+          isEdit={true}
+        />
+      )}
     </div>
   )
 }

@@ -43,7 +43,21 @@ export interface Mandant {
   sachbearbeiter?: UserShort
   vertretung?: UserShort
   branchen_liste: Branche[]
+  aenderungen: MandantAenderung[]
   created_at: string
+}
+
+export interface MandantAenderung {
+  id: number
+  mandant_id: number
+  aenderung_zum?: string
+  status: string
+  aenderungen: string
+  erstellt_von: UserShort
+  erstellt_am: string
+  aktiviert_am?: string
+  abgebrochen_am?: string
+  abgebrochen_von?: UserShort
 }
 
 export type WorkflowStatus =
