@@ -203,7 +203,7 @@ class Mandant(Base):
     email_logs = relationship("EmailLog", back_populates="mandant")
     branchen_liste = relationship("Branche", secondary=mandant_branchen, back_populates="mandanten")
     aenderungen = relationship("MandantAenderung", back_populates="mandant", order_by="MandantAenderung.erstellt_am")
-    fristenprofil = relationship("Fristenprofil", back_populates="mandant")
+    fristenprofil = relationship("Fristenprofil", back_populates="mandant", foreign_keys=[fristenprofil_id])
     kontakte = relationship("MandantKontakt", back_populates="mandant")
     notizen = relationship("MandantNotiz", back_populates="mandant", order_by="MandantNotiz.version")
 
@@ -245,7 +245,7 @@ class Fristenprofil(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    mandant = relationship("Mandant", back_populates="fristenprofil")
+    mandant = relationship("Mandant", back_populates="fristenprofil", foreign_keys=[mandant_id])
     regeln = relationship("Fristenregel", back_populates="profil", order_by="Fristenregel.position")
 
 
