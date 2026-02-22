@@ -95,9 +95,7 @@ export default function WorkflowDetail() {
         </button>
         <div className="flex-1">
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="text-2xl font-bold text-gray-900">
-              {wf.mandant?.name ?? 'Mandant'} · {monatLabel}
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-900">{wf.mandant?.name ?? 'Mandant'} · {monatLabel}</h1>
             <Ampel status={wf.ampelstatus} size="lg" showLabel />
             <WorkflowStatusBadge status={wf.status} />
           </div>
@@ -107,7 +105,6 @@ export default function WorkflowDetail() {
           </p>
         </div>
 
-        {/* Status change (staff only) */}
         {!isMandant && (
           <div className="flex gap-2">
             {wf.status !== 'abgeschlossen' && (
