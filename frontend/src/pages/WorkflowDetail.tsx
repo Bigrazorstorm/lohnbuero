@@ -266,6 +266,8 @@ export default function WorkflowDetail() {
                     })}
                   </>
                 )}
+              </div>
+            </div>
           </div>
         </div>
 
