@@ -1,0 +1,34 @@
+server {
+    # Railway setzt $PORT; nginx:alpine envsubst ersetzt das beim Start
+    listen ${PORT:-80};
+    server_name _;
+
+    gzip on;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml;
+
+    # API-Anfragen an das Backend weiterleiten
+    # BACKEND_URL wird als Railway-Umgebungsvariable gesetzt, z.B.:
+    #   https://aom-backend.up.railway.app
+    location /api/ {
+        proxy_pass         ${BACKEND_URL}/api/;
+        proxy_http_version 1.1;
+        proxy_set_header   Host              $http_host;
+        proxy_set_header   X-Real-IP         $remote_addr;
+        proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+        proxy_set_header   X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+    }
+
+    # Hochgeladene Dateien vom Backend durchleiten
+    location /uploads/ {
+        proxy_pass       ${BACKEND_URL}/uploads/;
+        proxy_set_header Host $http_host;
+    }
+
+    # React SPA – alle anderen Routen auf index.html
+    location / {
+        root       /usr/share/nginx/html;
+        index      index.html;
+        try_files  $uri $uri/ /index.html;
+    }
+}
