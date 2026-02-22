@@ -18,17 +18,20 @@ run_migrations()
 # Auto-seed the database on startup if it's empty
 def seed_demo_data():
     """Seed demo data if database is empty."""
-    db = SessionLocal()
     try:
-        if db.query(User).count() == 0:
-            from seed import seed
-            db.close()
-            seed()
-    finally:
+        db = SessionLocal()
         try:
-            db.close()
-        except:
-            pass
+            if db.query(User).count() == 0:
+                from seed import seed
+                db.close()
+                seed()
+        finally:
+            try:
+                db.close()
+            except:
+                pass
+    except Exception as e:
+        print(f"Warning: Auto-seeding failed: {e}")
 
 seed_demo_data()
 
