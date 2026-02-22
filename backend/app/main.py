@@ -5,7 +5,7 @@ import os
 
 from app.config import settings
 from app.database import Base, engine, run_migrations, SessionLocal
-from app.routers import auth, dashboard, dokumente, mandanten, tickets, users, workflows
+from app.routers import admin, auth, dashboard, dokumente, mandanten, tickets, users, workflows
 from app.routers import audit, email_templates
 from app.models import User
 
@@ -31,6 +31,18 @@ def seed_demo_data():
             pass
 
 seed_demo_data()
+
+# Seed system defaults (idempotent – only adds missing entries)
+def seed_system_defaults():
+    from app.seed_defaults import seed_all_defaults
+    db = SessionLocal()
+    try:
+        seed_all_defaults(db)
+        db.commit()
+    finally:
+        db.close()
+
+seed_system_defaults()
 
 app = FastAPI(
     title=settings.app_name,
@@ -62,6 +74,7 @@ app.include_router(dokumente.router)
 app.include_router(dashboard.router)
 app.include_router(audit.router)
 app.include_router(email_templates.router)
+app.include_router(admin.router)
 
 # Serve uploaded files
 uploads_dir = "uploads"

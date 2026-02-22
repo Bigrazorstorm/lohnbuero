@@ -9,6 +9,198 @@ from app.models import (
 )
 
 # ─────────────────────────────────────────
+# Branche (Admin Stammdaten)
+# ─────────────────────────────────────────
+
+class BrancheBase(BaseModel):
+    name: str
+    beschreibung: Optional[str] = None
+    faktor: float = 1.0
+    soka_relevant: bool = False
+    tags: Optional[str] = None  # JSON-encoded list
+
+class BrancheCreate(BrancheBase):
+    pass
+
+class BrancheUpdate(BaseModel):
+    name: Optional[str] = None
+    beschreibung: Optional[str] = None
+    faktor: Optional[float] = None
+    soka_relevant: Optional[bool] = None
+    tags: Optional[str] = None
+    ist_archiviert: Optional[bool] = None
+
+class BrancheOut(BrancheBase):
+    id: int
+    ist_archiviert: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Ausgabeweg Config (Admin Stammdaten)
+# ─────────────────────────────────────────
+
+class AusgabewegConfigBase(BaseModel):
+    name: str
+    beschreibung: Optional[str] = None
+    ist_aktiv: bool = True
+    beeinflusst_workflow: bool = False
+    zusatz_workflow_schritt: Optional[str] = None
+
+class AusgabewegConfigCreate(AusgabewegConfigBase):
+    pass
+
+class AusgabewegConfigUpdate(BaseModel):
+    name: Optional[str] = None
+    beschreibung: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+    beeinflusst_workflow: Optional[bool] = None
+    zusatz_workflow_schritt: Optional[str] = None
+
+class AusgabewegConfigOut(AusgabewegConfigBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Ticket-Anhänge
+# ─────────────────────────────────────────
+
+class TicketAnhangOut(BaseModel):
+    id: int
+    ticket_id: int
+    kommentar_id: Optional[int] = None
+    dateiname: str
+    dateityp: Optional[str] = None
+    dateigroesse: Optional[int] = None
+    speicherort: str
+    hash: Optional[str] = None
+    hochgeladen_von: Optional["UserShort"] = None
+    ist_intern: bool
+    ist_geloescht: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# SMTP-Konfiguration
+# ─────────────────────────────────────────
+
+class SmtpKonfigurationBase(BaseModel):
+    name: str = "Standard"
+    server: str
+    port: int = 587
+    tls_ssl: str = "starttls"
+    auth_user: Optional[str] = None
+    absender_email: str
+    reply_to: Optional[str] = None
+    ist_aktiv: bool = True
+
+class SmtpKonfigurationCreate(SmtpKonfigurationBase):
+    auth_password: Optional[str] = None
+
+class SmtpKonfigurationUpdate(BaseModel):
+    name: Optional[str] = None
+    server: Optional[str] = None
+    port: Optional[int] = None
+    tls_ssl: Optional[str] = None
+    auth_user: Optional[str] = None
+    auth_password: Optional[str] = None
+    absender_email: Optional[str] = None
+    reply_to: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+
+class SmtpKonfigurationOut(SmtpKonfigurationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# IMAP-Konfiguration
+# ─────────────────────────────────────────
+
+class ImapKonfigurationBase(BaseModel):
+    name: str = "Standard"
+    server: str
+    port: int = 993
+    tls_ssl: str = "ssl"
+    auth_user: Optional[str] = None
+    postfach: str = "INBOX"
+    ordner: Optional[str] = None
+    polling_intervall_sekunden: int = 300
+    zuordnung_methode: str = "betreff"
+    ist_aktiv: bool = True
+
+class ImapKonfigurationCreate(ImapKonfigurationBase):
+    auth_password: Optional[str] = None
+
+class ImapKonfigurationUpdate(BaseModel):
+    name: Optional[str] = None
+    server: Optional[str] = None
+    port: Optional[int] = None
+    tls_ssl: Optional[str] = None
+    auth_user: Optional[str] = None
+    auth_password: Optional[str] = None
+    postfach: Optional[str] = None
+    ordner: Optional[str] = None
+    polling_intervall_sekunden: Optional[int] = None
+    zuordnung_methode: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+
+class ImapKonfigurationOut(ImapKonfigurationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# System-Defaults
+# ─────────────────────────────────────────
+
+class SystemDefaultOut(BaseModel):
+    id: int
+    bereich: str
+    name: str
+    konfiguration: Optional[str] = None
+    ist_aktiv: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Upload-Konfiguration
+# ─────────────────────────────────────────
+
+class UploadKonfigurationBase(BaseModel):
+    max_dateigroesse_mb: int = 10
+    erlaubte_dateitypen: str = '["pdf","doc","docx","xls","xlsx","csv","jpg","jpeg","png","txt","zip"]'
+
+class UploadKonfigurationUpdate(BaseModel):
+    max_dateigroesse_mb: Optional[int] = None
+    erlaubte_dateitypen: Optional[str] = None
+
+class UploadKonfigurationOut(UploadKonfigurationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+# ─────────────────────────────────────────
 # Auth
 # ─────────────────────────────────────────
 
@@ -113,6 +305,7 @@ class MandantOut(MandantBase):
     portal_user_id: Optional[int] = None
     sachbearbeiter: Optional[UserShort] = None
     vertretung: Optional[UserShort] = None
+    branchen_liste: List[BrancheOut] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -290,6 +483,7 @@ class TicketKommentarOut(BaseModel):
     inhalt: str
     ist_intern: bool
     zitat_id: Optional[int] = None
+    anhaenge: List[TicketAnhangOut] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -334,6 +528,7 @@ class TicketOut(TicketBase):
     created_at: datetime
     updated_at: datetime
     kommentare: List[TicketKommentarOut] = []
+    anhaenge: List[TicketAnhangOut] = []
 
     model_config = {"from_attributes": True}
 

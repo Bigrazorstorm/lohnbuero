@@ -1,7 +1,10 @@
+import hashlib
+import json
+import os
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 
 from app import audit_service
@@ -9,10 +12,11 @@ from app.auth import get_current_user, require_staff
 from app.database import get_db
 from app.models import (
     EskalationStufe, Mandant, SLAKonfiguration, Ticket,
-    TicketKommentar, TicketPrioritaet, TicketStatus, User, UserRole,
+    TicketAnhang, TicketKommentar, TicketPrioritaet, TicketStatus,
+    UploadKonfiguration, User, UserRole,
 )
 from app.schemas import (
-    TicketCreate, TicketKommentarCreate, TicketKommentarOut,
+    TicketAnhangOut, TicketCreate, TicketKommentarCreate, TicketKommentarOut,
     TicketOut, TicketUpdate,
 )
 
@@ -355,3 +359,183 @@ def add_kommentar(
     db.commit()
     db.refresh(kommentar)
     return kommentar
+
+
+# ── Ticket-Anhänge ────────────────────────────────────────────
+
+def _get_upload_config(db: Session):
+    config = db.query(UploadKonfiguration).first()
+    if not config:
+        config = UploadKonfiguration()
+        db.add(config)
+        db.flush()
+    return config
+
+
+def _validate_upload(file: UploadFile, config: UploadKonfiguration):
+    """Validate file against upload configuration."""
+    erlaubte = json.loads(config.erlaubte_dateitypen)
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if file.filename else ""
+    if ext not in erlaubte:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Dateityp '.{ext}' nicht erlaubt. Erlaubt: {', '.join(erlaubte)}",
+        )
+
+
+@router.post("/{ticket_id}/anhaenge", response_model=TicketAnhangOut, status_code=status.HTTP_201_CREATED)
+async def upload_anhang(
+    ticket_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    ist_intern: bool = Form(False),
+    kommentar_id: Optional[int] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
+
+    if current_user.role == UserRole.MANDANT:
+        mandant = db.query(Mandant).filter(Mandant.portal_user_id == current_user.id).first()
+        if not mandant or mandant.id != ticket.mandant_id:
+            raise HTTPException(status_code=403, detail="Keine Berechtigung")
+        if ist_intern:
+            raise HTTPException(status_code=403, detail="Mandanten können keine internen Anhänge hochladen")
+
+    # Validate kommentar_id if provided
+    if kommentar_id:
+        kommentar = db.query(TicketKommentar).filter(
+            TicketKommentar.id == kommentar_id,
+            TicketKommentar.ticket_id == ticket_id,
+        ).first()
+        if not kommentar:
+            raise HTTPException(status_code=404, detail="Kommentar nicht gefunden")
+
+    # Validate upload
+    config = _get_upload_config(db)
+    _validate_upload(file, config)
+
+    # Read and save file
+    content = await file.read()
+    file_size = len(content)
+    max_bytes = config.max_dateigroesse_mb * 1024 * 1024
+    if file_size > max_bytes:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Datei zu groß ({file_size // (1024*1024)} MB). Maximum: {config.max_dateigroesse_mb} MB",
+        )
+
+    file_hash = hashlib.sha256(content).hexdigest()
+
+    # Save file
+    upload_dir = os.path.join("uploads", "ticket_anhaenge", str(ticket_id))
+    os.makedirs(upload_dir, exist_ok=True)
+    safe_filename = f"{file_hash[:12]}_{file.filename}"
+    file_path = os.path.join(upload_dir, safe_filename)
+
+    with open(file_path, "wb") as f:
+        f.write(content)
+
+    anhang = TicketAnhang(
+        ticket_id=ticket_id,
+        kommentar_id=kommentar_id,
+        dateiname=file.filename,
+        dateityp=file.content_type,
+        dateigroesse=file_size,
+        speicherort=f"/{file_path}",
+        hash=file_hash,
+        hochgeladen_von_id=current_user.id,
+        ist_intern=ist_intern,
+    )
+    db.add(anhang)
+    db.flush()
+
+    audit_service.log(
+        db,
+        objekt_typ="ticket_anhang",
+        objekt_id=anhang.id,
+        mandant_id=ticket.mandant_id,
+        aktionstyp="hochgeladen",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        neuer_wert={
+            "dateiname": file.filename,
+            "dateigroesse": file_size,
+            "hash": file_hash,
+            "ist_intern": ist_intern,
+        },
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Anhang '{file.filename}' zu Ticket #{ticket_id} hochgeladen",
+    )
+    db.commit()
+    db.refresh(anhang)
+    return anhang
+
+
+@router.get("/{ticket_id}/anhaenge", response_model=List[TicketAnhangOut])
+def list_anhaenge(
+    ticket_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+    if not ticket:
+        raise HTTPException(status_code=404, detail="Ticket nicht gefunden")
+
+    q = db.query(TicketAnhang).filter(
+        TicketAnhang.ticket_id == ticket_id,
+        TicketAnhang.ist_geloescht == False,
+    )
+
+    # Mandant cannot see internal attachments
+    if current_user.role == UserRole.MANDANT:
+        mandant = db.query(Mandant).filter(Mandant.portal_user_id == current_user.id).first()
+        if not mandant or mandant.id != ticket.mandant_id:
+            raise HTTPException(status_code=403, detail="Keine Berechtigung")
+        q = q.filter(TicketAnhang.ist_intern == False)
+
+    return q.order_by(TicketAnhang.created_at).all()
+
+
+@router.delete("/{ticket_id}/anhaenge/{anhang_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_anhang(
+    ticket_id: int,
+    anhang_id: int,
+    request: Request,
+    begruendung: str = Query(..., min_length=3),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    anhang = db.query(TicketAnhang).filter(
+        TicketAnhang.id == anhang_id,
+        TicketAnhang.ticket_id == ticket_id,
+    ).first()
+    if not anhang:
+        raise HTTPException(status_code=404, detail="Anhang nicht gefunden")
+
+    # Logical delete only
+    anhang.ist_geloescht = True
+    anhang.loeschung_begruendung = begruendung
+    anhang.geloescht_am = datetime.utcnow()
+    anhang.geloescht_von_id = current_user.id
+
+    ticket = db.query(Ticket).filter(Ticket.id == ticket_id).first()
+
+    audit_service.log(
+        db,
+        objekt_typ="ticket_anhang",
+        objekt_id=anhang.id,
+        mandant_id=ticket.mandant_id if ticket else None,
+        aktionstyp="geloescht",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        neuer_wert={
+            "dateiname": anhang.dateiname,
+            "begruendung": begruendung,
+        },
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Anhang '{anhang.dateiname}' von Ticket #{ticket_id} gelöscht (logisch)",
+    )
+    db.commit()
