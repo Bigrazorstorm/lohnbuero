@@ -39,10 +39,6 @@ services:
     build: ./frontend
     ports:
       - "5173:5173"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev -- --host
     depends_on:
       - backend
 
