@@ -28,13 +28,13 @@ def get_db():
 
 def run_migrations():
     """Safely add new columns to existing tables (idempotent)."""
+    from sqlalchemy import inspect
+    
     with engine.connect() as conn:
-        def _cols(table: str) -> set:
-            result = conn.execute(text(f"PRAGMA table_info({table})"))
-            return {row[1] for row in result}
-
+        inspector = inspect(engine)
+        
         # tickets
-        ticket_cols = _cols("tickets")
+        ticket_cols = {col['name'] for col in inspector.get_columns('tickets')}
         if "monat" not in ticket_cols:
             conn.execute(text("ALTER TABLE tickets ADD COLUMN monat INTEGER"))
         if "jahr" not in ticket_cols:
@@ -43,7 +43,7 @@ def run_migrations():
             conn.execute(text("ALTER TABLE tickets ADD COLUMN eskalationsstufe TEXT"))
 
         # ticket_kommentare
-        kom_cols = _cols("ticket_kommentare")
+        kom_cols = {col['name'] for col in inspector.get_columns('ticket_kommentare')}
         if "ist_intern" not in kom_cols:
             conn.execute(text(
                 "ALTER TABLE ticket_kommentare ADD COLUMN ist_intern BOOLEAN NOT NULL DEFAULT FALSE"
@@ -54,21 +54,21 @@ def run_migrations():
             ))
 
         # mandanten – onboarding flag
-        mandant_cols = _cols("mandanten")
+        mandant_cols = {col['name'] for col in inspector.get_columns('mandanten')}
         if "onboarding_abgeschlossen" not in mandant_cols:
             conn.execute(text(
                 "ALTER TABLE mandanten ADD COLUMN onboarding_abgeschlossen BOOLEAN DEFAULT FALSE"
             ))
 
         # workflow_vorlagen – onboarding flag
-        vl_cols = _cols("workflow_vorlagen")
+        vl_cols = {col['name'] for col in inspector.get_columns('workflow_vorlagen')}
         if "ist_onboarding" not in vl_cols:
             conn.execute(text(
                 "ALTER TABLE workflow_vorlagen ADD COLUMN ist_onboarding BOOLEAN DEFAULT FALSE"
             ))
 
         # workflow_instanzen – re-open fields
-        wi_cols = _cols("workflow_instanzen")
+        wi_cols = {col['name'] for col in inspector.get_columns('workflow_instanzen')}
         if "wiedereroeffnet_am" not in wi_cols:
             conn.execute(text(
                 "ALTER TABLE workflow_instanzen ADD COLUMN wiedereroeffnet_am DATETIME"
@@ -79,14 +79,14 @@ def run_migrations():
             ))
 
         # dokumente – logical delete
-        dok_cols = _cols("dokumente")
+        dok_cols = {col['name'] for col in inspector.get_columns('dokumente')}
         if "ist_geloescht" not in dok_cols:
             conn.execute(text(
                 "ALTER TABLE dokumente ADD COLUMN ist_geloescht BOOLEAN DEFAULT FALSE"
             ))
 
         # users – workload fields
-        user_cols = _cols("users")
+        user_cols = {col['name'] for col in inspector.get_columns('users')}
         if "workload_limit" not in user_cols:
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN workload_limit REAL DEFAULT 100.0"
@@ -109,7 +109,6 @@ def run_migrations():
             ))
 
         # tickets – new fields (v1.5)
-        ticket_cols = _cols("tickets")
         if "unterkategorie" not in ticket_cols:
             conn.execute(text("ALTER TABLE tickets ADD COLUMN unterkategorie TEXT"))
         if "wiedervorlage_datum" not in ticket_cols:
@@ -120,7 +119,7 @@ def run_migrations():
             conn.execute(text("ALTER TABLE tickets ADD COLUMN workflow_item_id INTEGER"))
 
         # workflow_items – new fields (v1.5)
-        item_cols = _cols("workflow_items")
+        item_cols = {col['name'] for col in inspector.get_columns('workflow_items')}
         if "zugewiesen_an_id" not in item_cols:
             conn.execute(text("ALTER TABLE workflow_items ADD COLUMN zugewiesen_an_id INTEGER"))
         if "fristart_referenz" not in item_cols:
@@ -131,7 +130,7 @@ def run_migrations():
             conn.execute(text("ALTER TABLE workflow_items ADD COLUMN blockiert_grund TEXT"))
 
         # workflow_vorlage_items – new fields (v1.5)
-        vli_cols = _cols("workflow_vorlage_items")
+        vli_cols = {col['name'] for col in inspector.get_columns('workflow_vorlage_items')}
         if "ist_optional_pro_mandant" not in vli_cols:
             conn.execute(text("ALTER TABLE workflow_vorlage_items ADD COLUMN ist_optional_pro_mandant BOOLEAN DEFAULT FALSE"))
         if "fristart_referenz" not in vli_cols:
