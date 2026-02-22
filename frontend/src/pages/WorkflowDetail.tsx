@@ -86,52 +86,6 @@ export default function WorkflowDetail() {
   // Calculate process steps completion
   const completedProcessSteps = PROCESS_STEPS.filter(step => wf[step.key as keyof WorkflowInstanz]).length
 
-  // Render process step item
-  const renderProcessStep = (step: typeof PROCESS_STEPS[0]) => {
-    const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
-    const isDone = !!value
-
-    return (
-      <div
-        key={step.key}
-        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-          isDone
-            ? 'border-green-100 bg-green-50'
-            : 'border-amber-100 bg-amber-50'
-        }`}
-      >
-        {/* Checkmark */}
-        <div className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center ${
-          isDone ? 'bg-green-500 border-green-500' : 'border-amber-300'
-        }`}>
-          {isDone && <Check size={12} className="text-white" />}
-        </div>
-
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span className={`text-sm font-semibold ${isDone ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-              {step.label}
-            </span>
-            <span className="badge bg-amber-100 text-amber-700 text-xs font-medium">Kernprozess</span>
-          </div>
-          {isDone ? (
-            <p className="text-xs text-green-600 mt-1">
-              ✓ {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })}
-            </p>
-          ) : !isMandant ? (
-            <button
-              className="text-xs text-blue-600 hover:underline mt-1"
-              onClick={() => markProcessStep(step.key)}
-              disabled={workflowMutation.isPending}
-            >
-              Jetzt markieren →
-            </button>
-          ) : null}
-        </div>
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -194,25 +148,62 @@ export default function WorkflowDetail() {
           <div className="card space-y-2 py-4">
             <h2 className="text-base font-semibold text-gray-900 mb-4">Prozessablauf & Checkliste</h2>
 
-            {PROCESS_STEPS.length === 0 && wf.items.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">Keine Einträge</p>
-            ) : (
-              <div className="space-y-2">
+            <div className="space-y-2">
                 {/* Kernprozess-Schritte */}
-                {PROCESS_STEPS.length > 0 && (
-                  <div className="space-y-2">
-                    {PROCESS_STEPS.map(renderProcessStep)}
-                  </div>
-                )}
+                {PROCESS_STEPS.map((step, idx) => {
+                  const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
+                  const isDone = !!value
 
-                {/* Separator if both exist */}
-                {PROCESS_STEPS.length > 0 && wf.items.length > 0 && (
-                  <div className="py-2">
-                    <div className="border-t border-gray-200"></div>
-                  </div>
+                  return (
+                    <div
+                      key={idx}
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                        isDone
+                          ? 'border-green-100 bg-green-50'
+                          : 'border-amber-100 bg-amber-50'
+                      }`}
+                    >
+                      {/* Checkmark */}
+                      <div className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center ${
+                        isDone ? 'bg-green-500 border-green-500' : 'border-amber-300'
+                      }`}>
+                        {isDone && <Check size={12} className="text-white" />}
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-sm font-semibold ${isDone ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                            {step.label}
+                          </span>
+                          <span className="badge bg-amber-100 text-amber-700 text-xs font-medium">Kernprozess</span>
+                        </div>
+                        {isDone ? (
+                          <p className="text-xs text-green-600 mt-1">
+                            ✓ {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })}
+                          </p>
+                        ) : !isMandant ? (
+                          <button
+                            className="text-xs text-blue-600 hover:underline mt-1"
+                            onClick={() => markProcessStep(step.key)}
+                            disabled={workflowMutation.isPending}
+                          >
+                            Jetzt markieren →
+                          </button>
+                        ) : null}
+                      </div>
+                    </div>
+                  )
+                })}
+
+                {/* Separator if both sections exist */}
+                {wf.items.length > 0 && (
+                  <div className="my-2 border-t border-gray-200" />
                 )}
 
                 {/* Flexible checklist items */}
+                {wf.items.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">Keine zusätzlichen Checklisten-Einträge</p>
+                ) : (
                 {wf.items.map((item) => {
                   const isOverdue = item.faellig_datum && new Date(item.faellig_datum) < new Date() && item.status !== 'erledigt'
                   return (
