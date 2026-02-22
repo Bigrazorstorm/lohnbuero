@@ -80,4 +80,19 @@ def run_migrations():
                 "ALTER TABLE dokumente ADD COLUMN ist_geloescht BOOLEAN DEFAULT FALSE"
             ))
 
+        # users – workload fields
+        user_cols = _cols("users")
+        if "workload_limit" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN workload_limit REAL DEFAULT 100.0"
+            ))
+        if "current_workload" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN current_workload REAL DEFAULT 0.0"
+            ))
+        if "total_points_earned" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN total_points_earned REAL DEFAULT 0.0"
+            ))
+
         conn.commit()
