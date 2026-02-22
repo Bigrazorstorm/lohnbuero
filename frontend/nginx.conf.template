@@ -1,6 +1,6 @@
 server {
     # Railway setzt $PORT; nginx:alpine envsubst ersetzt das beim Start
-    listen ${PORT:-80};
+    listen ${PORT};
     server_name _;
 
     gzip on;

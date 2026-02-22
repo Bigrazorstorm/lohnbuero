@@ -131,9 +131,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    email = Column(String, unique=True, index=True, nullable=False)
-    full_name = Column(String, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    email = Column(String(255), unique=True, index=True, nullable=False)
+    full_name = Column(String(255), nullable=False)
+    hashed_password = Column(String(255), nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.SACHBEARBEITER)
     is_active = Column(Boolean, default=True)
     is_archived = Column(Boolean, default=False)        # login disabled, history preserved
@@ -166,20 +166,20 @@ class Mandant(Base):
     __tablename__ = "mandanten"
 
     id = Column(Integer, primary_key=True, index=True)
-    nummer = Column(String, unique=True, index=True)
-    name = Column(String, nullable=False, index=True)
-    branche = Column(String)
+    nummer = Column(String(50), unique=True, index=True)
+    name = Column(String(255), nullable=False, index=True)
+    branche = Column(String(100))
 
     # Ansprechpartner
-    ansprechpartner_name = Column(String)
-    ansprechpartner_email = Column(String)
-    ansprechpartner_telefon = Column(String)
+    ansprechpartner_name = Column(String(255))
+    ansprechpartner_email = Column(String(255))
+    ansprechpartner_telefon = Column(String(50))
 
     # Fristen & Organisation
     lohnabschluss_tag = Column(Integer, default=15)  # day of month
     abgabeweg = Column(Enum(Abgabeweg), default=Abgabeweg.EMAIL)
     kategorie = Column(Enum(MandantKategorie), default=MandantKategorie.B)
-    service_level = Column(String)
+    service_level = Column(String(50))
     mitarbeiteranzahl = Column(Integer, default=1)
     besonderheiten = Column(Text)
 
@@ -223,7 +223,7 @@ class MandantAenderung(Base):
     id = Column(Integer, primary_key=True, index=True)
     mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
     aenderung_zum = Column(DateTime, nullable=True)  # None = sofort wirksam
-    status = Column(String, default="geplant")  # geplant, aktiviert, abgebrochen
+    status = Column(String(50), default="geplant")  # geplant, aktiviert, abgebrochen
     aenderungen = Column(Text, nullable=False)  # JSON der geänderten Felder
     erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     erstellt_am = Column(DateTime, default=datetime.utcnow)
@@ -245,7 +245,7 @@ class Fristenprofil(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
-    name = Column(String, nullable=False)  # e.g. "Standard Fristenprofil"
+    name = Column(String(255), nullable=False)  # e.g. "Standard Fristenprofil"
     ist_aktiv = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -260,10 +260,10 @@ class Fristenregel(Base):
     id = Column(Integer, primary_key=True, index=True)
     profil_id = Column(Integer, ForeignKey("fristenprofile.id"), nullable=False)
     position = Column(Integer, nullable=False)
-    fristart = Column(String, nullable=False)  # e.g. "SV-Zahlung", "Lohnsteuer"
+    fristart = Column(String(100), nullable=False)  # e.g. "SV-Zahlung", "Lohnsteuer"
     regeltyp = Column(Enum(FristenRegeltyp), nullable=False)
     regel_config = Column(Text, nullable=False)  # JSON config for the rule
-    bundesland = Column(String, nullable=True)  # for holidays
+    bundesland = Column(String(50), nullable=True)  # for holidays
     interne_vorfrist_tage = Column(Integer, default=0)
     ist_aktiv = Column(Boolean, default=True)
 
@@ -281,8 +281,8 @@ class Sonderaufgabe(Base):
     mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=True)
     monat = Column(Integer, nullable=True)
     jahr = Column(Integer, nullable=True)
-    kategorie = Column(String, nullable=False)
-    titel = Column(String, nullable=False)
+    kategorie = Column(String(100), nullable=False)
+    titel = Column(String(255), nullable=False)
     beschreibung = Column(Text)
     faellig_datum = Column(DateTime, nullable=True)
     status = Column(Enum(SonderaufgabeStatus), default=SonderaufgabeStatus.OFFEN)
@@ -308,9 +308,9 @@ class MandantKontakt(Base):
     id = Column(Integer, primary_key=True, index=True)
     mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
     rolle = Column(Enum(MandantKontaktRolle), nullable=False)
-    name = Column(String, nullable=False)
-    email = Column(String, nullable=True)
-    telefon = Column(String, nullable=True)
+    name = Column(String(255), nullable=False)
+    email = Column(String(255), nullable=True)
+    telefon = Column(String(50), nullable=True)
     ist_aktiv = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -343,9 +343,9 @@ class WorkflowVorlage(Base):
     __tablename__ = "workflow_vorlagen"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
+    name = Column(String(255), nullable=False)
     beschreibung = Column(Text)
-    branche = Column(String)  # optional branche filter
+    branche = Column(String(100))  # optional branche filter
     ist_standard = Column(Boolean, default=False)
     ist_onboarding = Column(Boolean, default=False)
     erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -361,7 +361,7 @@ class WorkflowVorlageItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     vorlage_id = Column(Integer, ForeignKey("workflow_vorlagen.id"), nullable=False)
     position = Column(Integer, nullable=False)
-    titel = Column(String, nullable=False)
+    titel = Column(String(255), nullable=False)
     beschreibung = Column(Text)
     verantwortlich_rolle = Column(Enum(UserRole))
     faellig_offset_tage = Column(Integer, default=0)  # days after month start
@@ -369,7 +369,7 @@ class WorkflowVorlageItem(Base):
     ist_optional_pro_mandant = Column(Boolean, default=False)  # can be activated per mandant
     erfordert_dokument = Column(Boolean, default=False)
     erfordert_pruefung = Column(Boolean, default=False)  # 4-eyes
-    fristart_referenz = Column(String, nullable=True)  # e.g. "SV-Zahlung", links to Fristart
+    fristart_referenz = Column(String(100), nullable=True)  # e.g. "SV-Zahlung", links to Fristart
     fristart_offset_tage = Column(Integer, default=0)  # offset from the referenced deadline (negative = before)
     standard_punkte = Column(Float, default=1.0)  # default points for this step
 
@@ -427,7 +427,7 @@ class WorkflowItem(Base):
     instanz_id = Column(Integer, ForeignKey("workflow_instanzen.id"), nullable=False)
     vorlage_item_id = Column(Integer, ForeignKey("workflow_vorlage_items.id"), nullable=True)
     position = Column(Integer, nullable=False)
-    titel = Column(String, nullable=False)
+    titel = Column(String(255), nullable=False)
     beschreibung = Column(Text)
     verantwortlich_rolle = Column(Enum(UserRole))
     zugewiesen_an_id = Column(Integer, ForeignKey("users.id"), nullable=True)
@@ -435,7 +435,7 @@ class WorkflowItem(Base):
     ist_pflicht = Column(Boolean, default=True)
     erfordert_dokument = Column(Boolean, default=False)
     erfordert_pruefung = Column(Boolean, default=False)
-    fristart_referenz = Column(String, nullable=True)  # links to Fristart for deadline coupling
+    fristart_referenz = Column(String(100), nullable=True)  # links to Fristart for deadline coupling
 
     status = Column(Enum(ChecklistItemStatus), default=ChecklistItemStatus.OFFEN)
     erledigt_am = Column(DateTime, nullable=True)
@@ -443,7 +443,7 @@ class WorkflowItem(Base):
     notiz = Column(Text)
     punkte = Column(Float, default=0.0)
     ist_blockiert = Column(Boolean, default=False)
-    blockiert_grund = Column(String, nullable=True)  # e.g. "Wartet auf Ticket #12"
+    blockiert_grund = Column(String(255), nullable=True)  # e.g. "Wartet auf Ticket #12"
 
     instanz = relationship("WorkflowInstanz", back_populates="items")
     zugewiesen_an = relationship("User", foreign_keys=[zugewiesen_an_id])
@@ -464,12 +464,12 @@ class Ticket(Base):
     erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     zugewiesen_an_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    titel = Column(String, nullable=False)
+    titel = Column(String(255), nullable=False)
     beschreibung = Column(Text)
     status = Column(Enum(TicketStatus), default=TicketStatus.NEU)
     prioritaet = Column(Enum(TicketPrioritaet), default=TicketPrioritaet.NORMAL)
-    kategorie = Column(String)
-    unterkategorie = Column(String, nullable=True)
+    kategorie = Column(String(100))
+    unterkategorie = Column(String(100), nullable=True)
 
     # Month reference (which payroll month this ticket belongs to)
     monat = Column(Integer, nullable=True)
@@ -524,7 +524,7 @@ class SLAKonfiguration(Base):
     __tablename__ = "sla_konfigurationen"
 
     id = Column(Integer, primary_key=True, index=True)
-    kategorie = Column(String, nullable=False)          # ticket category name
+    kategorie = Column(String(100), nullable=False)          # ticket category name
     prioritaet = Column(Enum(TicketPrioritaet), nullable=True)  # null = applies to all prios
     sla_stunden = Column(Integer, nullable=False, default=48)   # hours until SLA breach
     eskalation_stufe1_stunden = Column(Integer, default=72)     # hours until level-1 escalation
@@ -545,11 +545,11 @@ class Dokument(Base):
     workflow_item_id = Column(Integer, ForeignKey("workflow_items.id"), nullable=True)
     hochgeladen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    name = Column(String, nullable=False)
-    dateityp = Column(String)
+    name = Column(String(255), nullable=False)
+    dateityp = Column(String(50))
     dateigroesse = Column(Integer)  # bytes
-    speicherort = Column(String)    # path or URL
-    kategorie = Column(String)
+    speicherort = Column(String(500))    # path or URL
+    kategorie = Column(String(100))
     notiz = Column(Text)
     ist_geloescht = Column(Boolean, default=False)  # logical delete only
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -590,18 +590,18 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
 
     id = Column(Integer, primary_key=True, index=True)
-    objekt_typ = Column(String, nullable=False)      # e.g. "mandant", "ticket", "workflow"
+    objekt_typ = Column(String(100), nullable=False)      # e.g. "mandant", "ticket", "workflow"
     objekt_id = Column(Integer, nullable=True)
     mandant_id = Column(Integer, nullable=True)       # denormalized for fast filtering
     monat = Column(Integer, nullable=True)
     jahr = Column(Integer, nullable=True)
-    aktionstyp = Column(String, nullable=False)       # e.g. "erstellt", "statusaenderung"
+    aktionstyp = Column(String(100), nullable=False)       # e.g. "erstellt", "statusaenderung"
     alter_wert = Column(Text, nullable=True)          # JSON string
     neuer_wert = Column(Text, nullable=True)          # JSON string
     benutzer_id = Column(Integer, nullable=True)
-    benutzerrolle = Column(String, nullable=True)
+    benutzerrolle = Column(String(50), nullable=True)
     zeitstempel = Column(DateTime, default=datetime.utcnow, nullable=False)
-    ip_adresse = Column(String, nullable=True)
+    ip_adresse = Column(String(45), nullable=True)
     beschreibung = Column(Text, nullable=True)        # human-readable summary
 
 
@@ -613,12 +613,12 @@ class EmailTemplate(Base):
     __tablename__ = "email_templates"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    betreff = Column(String, nullable=False)
+    name = Column(String(255), nullable=False)
+    betreff = Column(String(255), nullable=False)
     html_inhalt = Column(Text, nullable=False)
     text_inhalt = Column(Text, nullable=True)
     beschreibung = Column(Text, nullable=True)
-    typ = Column(String, nullable=True)              # "onboarding_welcome", "onboarding_reminder", "unterlagen_reminder"
+    typ = Column(String(100), nullable=True)              # "onboarding_welcome", "onboarding_reminder", "unterlagen_reminder"
     ist_aktiv = Column(Boolean, default=True)
     reihenfolge = Column(Integer, default=0)         # for onboarding sequence ordering
     verzoegerung_tage = Column(Integer, default=0)   # days after previous email in sequence
@@ -634,8 +634,8 @@ class EmailLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     template_id = Column(Integer, ForeignKey("email_templates.id"), nullable=True)
     mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
-    empfaenger = Column(String, nullable=False)
-    betreff = Column(String, nullable=False)
+    empfaenger = Column(String(255), nullable=False)
+    betreff = Column(String(255), nullable=False)
     status = Column(Enum(EmailLogStatus), default=EmailLogStatus.GESENDET)
     gesendet_am = Column(DateTime, default=datetime.utcnow)
     fehler = Column(Text, nullable=True)
@@ -652,7 +652,7 @@ class Branche(Base):
     __tablename__ = "branchen"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, unique=True)
+    name = Column(String(255), nullable=False, unique=True)
     beschreibung = Column(Text, nullable=True)
     faktor = Column(Float, default=1.0)               # Punkte-/Komplexitätsfaktor
     soka_relevant = Column(Boolean, default=False)     # SOKA-Relevanz
@@ -672,11 +672,11 @@ class AusgabewegConfig(Base):
     __tablename__ = "ausgabeweg_configs"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, unique=True)
+    name = Column(String(255), nullable=False, unique=True)
     beschreibung = Column(Text, nullable=True)
     ist_aktiv = Column(Boolean, default=True)
     beeinflusst_workflow = Column(Boolean, default=False)  # adds extra workflow steps
-    zusatz_workflow_schritt = Column(String, nullable=True)  # e.g. "Upload ins Portal"
+    zusatz_workflow_schritt = Column(String(255), nullable=True)  # e.g. "Upload ins Portal"
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -691,11 +691,11 @@ class TicketAnhang(Base):
     id = Column(Integer, primary_key=True, index=True)
     ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False)
     kommentar_id = Column(Integer, ForeignKey("ticket_kommentare.id"), nullable=True)
-    dateiname = Column(String, nullable=False)
-    dateityp = Column(String, nullable=True)
+    dateiname = Column(String(255), nullable=False)
+    dateityp = Column(String(50), nullable=True)
     dateigroesse = Column(Integer, nullable=True)        # bytes
-    speicherort = Column(String, nullable=False)
-    hash = Column(String, nullable=True)                 # file hash for integrity
+    speicherort = Column(String(500), nullable=False)
+    hash = Column(String(128), nullable=True)                 # file hash for integrity
     hochgeladen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     ist_intern = Column(Boolean, default=False)          # internal-only, not visible to mandant
     ist_geloescht = Column(Boolean, default=False)       # logical delete
@@ -718,14 +718,14 @@ class SmtpKonfiguration(Base):
     __tablename__ = "smtp_konfigurationen"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, default="Standard")
-    server = Column(String, nullable=False)
+    name = Column(String(255), nullable=False, default="Standard")
+    server = Column(String(255), nullable=False)
     port = Column(Integer, nullable=False, default=587)
-    tls_ssl = Column(String, default="starttls")       # "starttls", "ssl", "none"
-    auth_user = Column(String, nullable=True)
-    auth_password_encrypted = Column(String, nullable=True)
-    absender_email = Column(String, nullable=False)
-    reply_to = Column(String, nullable=True)
+    tls_ssl = Column(String(20), default="starttls")       # "starttls", "ssl", "none"
+    auth_user = Column(String(255), nullable=True)
+    auth_password_encrypted = Column(String(500), nullable=True)
+    absender_email = Column(String(255), nullable=False)
+    reply_to = Column(String(255), nullable=True)
     ist_aktiv = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -739,16 +739,16 @@ class ImapKonfiguration(Base):
     __tablename__ = "imap_konfigurationen"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, default="Standard")
-    server = Column(String, nullable=False)
+    name = Column(String(255), nullable=False, default="Standard")
+    server = Column(String(255), nullable=False)
     port = Column(Integer, nullable=False, default=993)
-    tls_ssl = Column(String, default="ssl")            # "ssl", "starttls", "none"
-    auth_user = Column(String, nullable=True)
-    auth_password_encrypted = Column(String, nullable=True)
-    postfach = Column(String, default="INBOX")
-    ordner = Column(String, nullable=True)              # e.g. "INBOX/Tickets"
+    tls_ssl = Column(String(20), default="ssl")            # "ssl", "starttls", "none"
+    auth_user = Column(String(255), nullable=True)
+    auth_password_encrypted = Column(String(500), nullable=True)
+    postfach = Column(String(255), default="INBOX")
+    ordner = Column(String(255), nullable=True)              # e.g. "INBOX/Tickets"
     polling_intervall_sekunden = Column(Integer, default=300)
-    zuordnung_methode = Column(String, default="betreff")  # "betreff", "message_id", "reply_to_token"
+    zuordnung_methode = Column(String(50), default="betreff")  # "betreff", "message_id", "reply_to_token"
     ist_aktiv = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -762,8 +762,8 @@ class SystemDefault(Base):
     __tablename__ = "system_defaults"
 
     id = Column(Integer, primary_key=True, index=True)
-    bereich = Column(String, nullable=False)            # e.g. "branchen", "ausgabewege", "fristen", etc.
-    name = Column(String, nullable=False)
+    bereich = Column(String(100), nullable=False)            # e.g. "branchen", "ausgabewege", "fristen", etc.
+    name = Column(String(255), nullable=False)
     konfiguration = Column(Text, nullable=True)          # JSON config
     ist_aktiv = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -793,16 +793,16 @@ class FristenVorlage(Base):
     __tablename__ = "fristen_vorlagen"
 
     id = Column(Integer, primary_key=True, index=True)
-    code = Column(String, unique=True, nullable=False)          # e.g. "SV_ZAHLUNG"
-    name = Column(String, nullable=False)                       # e.g. "SV-Beitragszahlung"
+    code = Column(String(50), unique=True, nullable=False)          # e.g. "SV_ZAHLUNG"
+    name = Column(String(255), nullable=False)                       # e.g. "SV-Beitragszahlung"
     beschreibung = Column(Text, nullable=True)
     regeltyp = Column(Enum(FristenRegeltyp), nullable=False)
     regel_config = Column(Text, nullable=False)                 # JSON config
     default_interne_vorfrist_tage = Column(Integer, default=2)
     ist_jahresbezogen = Column(Boolean, default=False)          # e.g. DEÜV Jahresmeldung, UV
     ist_ereignisbasiert = Column(Boolean, default=False)        # e.g. DEÜV Sofortmeldung
-    branchenfilter = Column(String, nullable=True)              # null = all, "SOKA" = only SOKA-relevant
-    anmeldezeitraum = Column(String, nullable=True)             # "monatlich", "vierteljaehrlich", "jaehrlich"
+    branchenfilter = Column(String(100), nullable=True)              # null = all, "SOKA" = only SOKA-relevant
+    anmeldezeitraum = Column(String(50), nullable=True)             # "monatlich", "vierteljaehrlich", "jaehrlich"
     ist_aktiv = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -816,12 +816,12 @@ class WorkflowSchrittTyp(Base):
     __tablename__ = "workflow_schritt_typen"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False, unique=True)
+    name = Column(String(255), nullable=False, unique=True)
     beschreibung = Column(Text, nullable=True)
     ist_pflicht = Column(Boolean, default=True)
     standard_rolle = Column(Enum(UserRole), nullable=True)      # default role
-    abhaengigkeit_von = Column(String, nullable=True)           # name of blocking step type
-    fristart_referenz = Column(String, nullable=True)           # e.g. "SV_ZAHLUNG"
+    abhaengigkeit_von = Column(String(255), nullable=True)           # name of blocking step type
+    fristart_referenz = Column(String(100), nullable=True)           # e.g. "SV_ZAHLUNG"
     fristart_offset_tage = Column(Integer, default=0)           # offset from deadline
     standard_punkte = Column(Float, default=1.0)
     ist_aktiv = Column(Boolean, default=True)
@@ -859,7 +859,7 @@ class PunkteKonfiguration(Base):
     __tablename__ = "punkte_konfigurationen"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)                       # e.g. "Standard", "SOKA"
+    name = Column(String(255), nullable=False)                       # e.g. "Standard", "SOKA"
     kategorie_basis = Column(Text, nullable=False)              # JSON: {"A": 10, "B": 5, "C": 3}
     mitarbeiter_stufen = Column(Text, nullable=False)           # JSON: [{"bis": 10, "faktor": 1.0}, {"bis": 50, "faktor": 1.5}]
     branchen_faktoren = Column(Text, nullable=True)             # JSON: {"Baugewerbe": 1.3}
