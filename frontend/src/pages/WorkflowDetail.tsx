@@ -35,7 +35,7 @@ export default function WorkflowDetail() {
   // Audit log for this workflow
   const { data: auditLogs } = useQuery<AuditLog[]>({
     queryKey: ['workflow-audit', id],
-    queryFn: () => auditApi.list({ objekt_typ: 'workflow', objekt_id: Number(id) }),
+    queryFn: () => auditApi.list({ objekt_typ: 'workflow', objekt_id: Number(id) }).then((r) => r.data),
     enabled: !!id,
   })
 
