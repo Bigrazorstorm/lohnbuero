@@ -83,6 +83,55 @@ export default function WorkflowDetail() {
   const totalRequired = wf.items.filter(i => i.ist_pflicht).length
   const progress = totalRequired > 0 ? Math.round((wf.items.filter(i => i.status === 'erledigt' && i.ist_pflicht).length / totalRequired) * 100) : 0
 
+  // Calculate process steps completion
+  const completedProcessSteps = PROCESS_STEPS.filter(step => wf[step.key as keyof WorkflowInstanz]).length
+
+  // Render process step item
+  const renderProcessStep = (step: typeof PROCESS_STEPS[0]) => {
+    const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
+    const isDone = !!value
+
+    return (
+      <div
+        key={step.key}
+        className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+          isDone
+            ? 'border-green-100 bg-green-50'
+            : 'border-amber-100 bg-amber-50'
+        }`}
+      >
+        {/* Checkmark */}
+        <div className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center ${
+          isDone ? 'bg-green-500 border-green-500' : 'border-amber-300'
+        }`}>
+          {isDone && <Check size={12} className="text-white" />}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-sm font-semibold ${isDone ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+              {step.label}
+            </span>
+            <span className="badge bg-amber-100 text-amber-700 text-xs font-medium">Kernprozess</span>
+          </div>
+          {isDone ? (
+            <p className="text-xs text-green-600 mt-1">
+              ✓ {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })}
+            </p>
+          ) : !isMandant ? (
+            <button
+              className="text-xs text-blue-600 hover:underline mt-1"
+              onClick={() => markProcessStep(step.key)}
+              disabled={workflowMutation.isPending}
+            >
+              Jetzt markieren →
+            </button>
+          ) : null}
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-5">
       {/* Header */}
@@ -125,127 +174,123 @@ export default function WorkflowDetail() {
       </div>
 
       <div className="grid grid-cols-3 gap-5">
-        {/* Checklist */}
+        {/* Consolidated Checklist */}
         <div className="col-span-2 space-y-4">
           {/* Progress bar */}
           <div className="card py-4">
             <div className="flex justify-between text-sm mb-2">
               <span className="font-medium text-gray-700">Fortschritt</span>
-              <span className="text-gray-500">{completedCount} / {wf.items.length} Schritte ({progress}%)</span>
+              <span className="text-gray-500">{completedProcessSteps + completedCount} / {PROCESS_STEPS.length + wf.items.length} Schritte ({Math.round(((completedProcessSteps + completedCount) / (PROCESS_STEPS.length + wf.items.length)) * 100)}%)</span>
             </div>
             <div className="w-full h-2.5 bg-gray-200 rounded-full overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all ${progress === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
-                style={{ width: `${progress}%` }}
+                className={`h-full rounded-full transition-all ${progress === 100 && completedProcessSteps === PROCESS_STEPS.length ? 'bg-green-500' : 'bg-blue-500'}`}
+                style={{ width: `${Math.round(((completedProcessSteps + completedCount) / (PROCESS_STEPS.length + wf.items.length)) * 100)}%` }}
               />
             </div>
           </div>
 
-          {/* Checklist items */}
+          {/* Consolidated items list */}
           <div className="card space-y-2 py-4">
-            <h2 className="text-base font-semibold text-gray-900 mb-3">Checkliste</h2>
-            {wf.items.length === 0 ? (
-              <p className="text-sm text-gray-400 text-center py-4">Keine Checklist-Einträge</p>
+            <h2 className="text-base font-semibold text-gray-900 mb-4">Prozessablauf & Checkliste</h2>
+
+            {PROCESS_STEPS.length === 0 && wf.items.length === 0 ? (
+              <p className="text-sm text-gray-400 text-center py-4">Keine Einträge</p>
             ) : (
-              wf.items.map((item) => {
-                const isOverdue = item.faellig_datum && new Date(item.faellig_datum) < new Date() && item.status !== 'erledigt'
-                return (
-                  <div
-                    key={item.id}
-                    className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-                      item.status === 'erledigt'
-                        ? 'border-green-100 bg-green-50'
-                        : isOverdue
-                        ? 'border-red-100 bg-red-50'
-                        : 'border-gray-100 hover:border-gray-200'
-                    }`}
-                  >
-                    {/* Checkbox */}
-                    <button
-                      disabled={isMandant || itemMutation.isPending}
-                      onClick={() => toggleItem(item.id, item.status)}
-                      className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${
-                        item.status === 'erledigt'
-                          ? 'bg-green-500 border-green-500 text-white'
-                          : 'border-gray-300 hover:border-green-400'
-                      } ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                    >
-                      {item.status === 'erledigt' && <Check size={12} />}
-                    </button>
-
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-sm font-medium ${item.status === 'erledigt' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                          {item.titel}
-                        </span>
-                        {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
-                        {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
-                        {item.erfordert_dokument && <span className="badge bg-blue-100 text-blue-600 text-xs">Dokument</span>}
-                        {isOverdue && <AlertCircle size={14} className="text-red-500" />}
-                      </div>
-                      {item.beschreibung && (
-                        <p className="text-xs text-gray-500 mt-0.5">{item.beschreibung}</p>
-                      )}
-                      <div className="flex items-center gap-3 mt-1">
-                        {item.faellig_datum && (
-                          <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
-                            <Clock size={11} />
-                            Fällig: {format(new Date(item.faellig_datum), 'dd.MM.yyyy', { locale: de })}
-                          </span>
-                        )}
-                        {item.erledigt_von && (
-                          <span className="text-xs text-gray-400">
-                            Erledigt von {item.erledigt_von.full_name}
-                            {item.erledigt_am && ` · ${format(new Date(item.erledigt_am), 'dd.MM.', { locale: de })}`}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <ChecklistStatusBadge status={item.status} />
+              <div className="space-y-2">
+                {/* Kernprozess-Schritte */}
+                {PROCESS_STEPS.length > 0 && (
+                  <div className="space-y-2">
+                    {PROCESS_STEPS.map(renderProcessStep)}
                   </div>
-                )
-              })
+                )}
+
+                {/* Separator if both exist */}
+                {PROCESS_STEPS.length > 0 && wf.items.length > 0 && (
+                  <div className="py-2">
+                    <div className="border-t border-gray-200"></div>
+                  </div>
+                )}
+
+                {/* Flexible checklist items */}
+                {wf.items.map((item) => {
+                  const isOverdue = item.faellig_datum && new Date(item.faellig_datum) < new Date() && item.status !== 'erledigt'
+                  return (
+                    <div
+                      key={item.id}
+                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                        item.status === 'erledigt'
+                          ? 'border-green-100 bg-green-50'
+                          : isOverdue
+                          ? 'border-red-100 bg-red-50'
+                          : 'border-gray-100 hover:border-gray-200'
+                      }`}
+                    >
+                      {/* Checkbox */}
+                      <button
+                        disabled={isMandant || itemMutation.isPending}
+                        onClick={() => toggleItem(item.id, item.status)}
+                        className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${
+                          item.status === 'erledigt'
+                            ? 'bg-green-500 border-green-500 text-white'
+                            : 'border-gray-300 hover:border-green-400'
+                        } ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                      >
+                        {item.status === 'erledigt' && <Check size={12} />}
+                      </button>
+
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-sm font-medium ${item.status === 'erledigt' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                            {item.titel}
+                          </span>
+                          {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
+                          {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
+                          {item.erfordert_dokument && <span className="badge bg-blue-100 text-blue-600 text-xs">Dokument</span>}
+                          {isOverdue && <AlertCircle size={14} className="text-red-500" />}
+                        </div>
+                        {item.beschreibung && (
+                          <p className="text-xs text-gray-500 mt-0.5">{item.beschreibung}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-1">
+                          {item.faellig_datum && (
+                            <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                              <Clock size={11} />
+                              Fällig: {format(new Date(item.faellig_datum), 'dd.MM.yyyy', { locale: de })}
+                            </span>
+                          )}
+                          {item.erledigt_von && (
+                            <span className="text-xs text-gray-400">
+                              Erledigt von {item.erledigt_von.full_name}
+                              {item.erledigt_am && ` · ${format(new Date(item.erledigt_am), 'dd.MM.', { locale: de })}`}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <ChecklistStatusBadge status={item.status} />
+                    </div>
+                  )
+                })}
+              </div>
             )}
           </div>
         </div>
 
-        {/* Process Timeline */}
+        {/* Right Column */}
         <div className="space-y-4">
+          {/* Process Summary Card */}
           <div className="card">
-            <h3 className="text-sm font-semibold text-gray-700 mb-4">Prozessschritte</h3>
-            <div className="space-y-3">
-              {PROCESS_STEPS.map((step) => {
-                const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
-                const isDone = !!value
-                return (
-                  <div key={step.key} className={`flex items-start gap-2.5 p-2 rounded-lg ${isDone ? 'bg-green-50' : 'bg-gray-50'}`}>
-                    <div className={`mt-0.5 w-4 h-4 rounded-full flex-shrink-0 border-2 flex items-center justify-center ${
-                      isDone ? 'bg-green-500 border-green-500' : 'border-gray-300'
-                    }`}>
-                      {isDone && <Check size={10} className="text-white" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className={`text-xs font-medium ${isDone ? 'text-green-800' : 'text-gray-600'}`}>
-                        {step.label}
-                      </p>
-                      {isDone ? (
-                        <p className="text-xs text-green-600">
-                          {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })}
-                        </p>
-                      ) : !isMandant ? (
-                        <button
-                          className="text-xs text-blue-600 hover:underline mt-0.5"
-                          onClick={() => markProcessStep(step.key)}
-                          disabled={workflowMutation.isPending}
-                        >
-                          Jetzt markieren
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                )
-              })}
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">Kernprozess-Status</h3>
+            <div className="flex items-center justify-between">
+              <span className="text-sm text-gray-600">Schritte abgeschlossen:</span>
+              <span className="text-lg font-bold text-amber-600">{completedProcessSteps} / {PROCESS_STEPS.length}</span>
+            </div>
+            <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-2">
+              <div
+                className="h-full bg-amber-500 rounded-full transition-all"
+                style={{ width: `${Math.round((completedProcessSteps / PROCESS_STEPS.length) * 100)}%` }}
+              />
             </div>
           </div>
 
@@ -254,7 +299,7 @@ export default function WorkflowDetail() {
             <div className="card">
               <h3 className="text-sm font-semibold text-gray-700 mb-2">Notizen</h3>
               <textarea
-                className="input h-28 resize-none text-sm"
+                className="input h-32 resize-none text-sm"
                 defaultValue={wf.notizen ?? ''}
                 onBlur={(e) => {
                   if (e.target.value !== wf.notizen) {
