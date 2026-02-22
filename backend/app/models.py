@@ -226,7 +226,7 @@ class MandantAenderung(Base):
     abgebrochen_am = Column(DateTime, nullable=True)
     abgebrochen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
 
-    mandant = relationship("Mandant", backref="aenderungen")
+    mandant = relationship("Mandant", back_populates="aenderungen")
     erstellt_von = relationship("User", foreign_keys=[erstellt_von_id])
     abgebrochen_von = relationship("User", foreign_keys=[abgebrochen_von_id])
 
