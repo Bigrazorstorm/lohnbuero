@@ -4,15 +4,33 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.config import settings
-from app.database import Base, engine, run_migrations
+from app.database import Base, engine, run_migrations, SessionLocal
 from app.routers import auth, dashboard, dokumente, mandanten, tickets, users, workflows
 from app.routers import audit, email_templates
+from app.models import User
 
 # Create all tables (new ones)
 Base.metadata.create_all(bind=engine)
 
 # Safely migrate existing tables (add new columns)
 run_migrations()
+
+# Auto-seed the database on startup if it's empty
+def seed_demo_data():
+    """Seed demo data if database is empty."""
+    db = SessionLocal()
+    try:
+        if db.query(User).count() == 0:
+            from seed import seed
+            db.close()
+            seed()
+    finally:
+        try:
+            db.close()
+        except:
+            pass
+
+seed_demo_data()
 
 app = FastAPI(
     title=settings.app_name,
