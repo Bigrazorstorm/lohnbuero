@@ -315,10 +315,10 @@ class MandantOut(MandantBase):
     sachbearbeiter: Optional[UserShort] = None
     vertretung: Optional[UserShort] = None
     branchen_liste: List[BrancheOut] = []
-    aenderungen: List[MandantAenderungOut] = []
-    fristenprofil: Optional[FristenprofilOut] = None
-    kontakte: List[MandantKontaktOut] = []
-    notizen: List[MandantNotizOut] = []
+    aenderungen: List["MandantAenderungOut"] = []
+    fristenprofil: Optional["FristenprofilOut"] = None
+    kontakte: List["MandantKontaktOut"] = []
+    notizen: List["MandantNotizOut"] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
