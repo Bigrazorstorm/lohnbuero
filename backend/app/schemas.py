@@ -245,6 +245,8 @@ class UserUpdate(BaseModel):
 
 class UserOut(UserBase):
     id: int
+    is_archived: bool = False
+    anonymisiert_am: Optional[datetime] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -509,8 +511,12 @@ class WorkflowVorlageItemBase(BaseModel):
     verantwortlich_rolle: Optional[UserRole] = None
     faellig_offset_tage: int = 0
     ist_pflicht: bool = True
+    ist_optional_pro_mandant: bool = False
     erfordert_dokument: bool = False
     erfordert_pruefung: bool = False
+    fristart_referenz: Optional[str] = None
+    fristart_offset_tage: int = 0
+    standard_punkte: float = 1.0
 
 
 class WorkflowVorlageItemCreate(WorkflowVorlageItemBase):
@@ -585,6 +591,7 @@ class WorkflowInstanzUpdate(BaseModel):
 class WorkflowItemUpdate(BaseModel):
     status: Optional[ChecklistItemStatus] = None
     notiz: Optional[str] = None
+    zugewiesen_an_id: Optional[int] = None
 
 
 class WorkflowItemOut(BaseModel):
@@ -594,15 +601,19 @@ class WorkflowItemOut(BaseModel):
     titel: str
     beschreibung: Optional[str] = None
     verantwortlich_rolle: Optional[UserRole] = None
+    zugewiesen_an: Optional[UserShort] = None
     faellig_datum: Optional[datetime] = None
     ist_pflicht: bool
     erfordert_dokument: bool
     erfordert_pruefung: bool
+    fristart_referenz: Optional[str] = None
     status: ChecklistItemStatus
     erledigt_am: Optional[datetime] = None
     erledigt_von: Optional[UserShort] = None
     notiz: Optional[str] = None
     punkte: float = 0.0
+    ist_blockiert: bool = False
+    blockiert_grund: Optional[str] = None
 
     model_config = {"from_attributes": True}
 
@@ -671,10 +682,12 @@ class TicketKommentarOut(BaseModel):
 class TicketBase(BaseModel):
     mandant_id: int
     workflow_instanz_id: Optional[int] = None
+    workflow_item_id: Optional[int] = None
     titel: str
     beschreibung: Optional[str] = None
     prioritaet: TicketPrioritaet = TicketPrioritaet.NORMAL
     kategorie: Optional[str] = None
+    unterkategorie: Optional[str] = None
     faellig_bis: Optional[datetime] = None
     zugewiesen_an_id: Optional[int] = None
     monat: Optional[int] = None
@@ -691,15 +704,20 @@ class TicketUpdate(BaseModel):
     status: Optional[TicketStatus] = None
     prioritaet: Optional[TicketPrioritaet] = None
     kategorie: Optional[str] = None
+    unterkategorie: Optional[str] = None
     faellig_bis: Optional[datetime] = None
     zugewiesen_an_id: Optional[int] = None
     eskalationsstufe: Optional[EskalationStufe] = None
+    wiedervorlage_datum: Optional[datetime] = None
+    abbruch_grund: Optional[str] = None
 
 
 class TicketOut(TicketBase):
     id: int
     status: TicketStatus
     eskalationsstufe: Optional[EskalationStufe] = None
+    wiedervorlage_datum: Optional[datetime] = None
+    abbruch_grund: Optional[str] = None
     erstellt_von: UserShort
     zugewiesen_an: Optional[UserShort] = None
     mandant: MandantShort
@@ -891,3 +909,168 @@ class MandantAmpelInfo(BaseModel):
     sachbearbeiter: Optional[UserShort] = None
 
     model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# FristenVorlage (Default Deadline Templates)
+# ─────────────────────────────────────────
+
+class FristenVorlageBase(BaseModel):
+    code: str
+    name: str
+    beschreibung: Optional[str] = None
+    regeltyp: FristenRegeltyp
+    regel_config: str  # JSON
+    default_interne_vorfrist_tage: int = 2
+    ist_jahresbezogen: bool = False
+    ist_ereignisbasiert: bool = False
+    branchenfilter: Optional[str] = None
+    anmeldezeitraum: Optional[str] = None
+    ist_aktiv: bool = True
+
+class FristenVorlageCreate(FristenVorlageBase):
+    pass
+
+class FristenVorlageOut(FristenVorlageBase):
+    id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# WorkflowSchrittTyp (Admin-definable)
+# ─────────────────────────────────────────
+
+class WorkflowSchrittTypBase(BaseModel):
+    name: str
+    beschreibung: Optional[str] = None
+    ist_pflicht: bool = True
+    standard_rolle: Optional[UserRole] = None
+    abhaengigkeit_von: Optional[str] = None
+    fristart_referenz: Optional[str] = None
+    fristart_offset_tage: int = 0
+    standard_punkte: float = 1.0
+    ist_aktiv: bool = True
+
+class WorkflowSchrittTypCreate(WorkflowSchrittTypBase):
+    pass
+
+class WorkflowSchrittTypUpdate(BaseModel):
+    name: Optional[str] = None
+    beschreibung: Optional[str] = None
+    ist_pflicht: Optional[bool] = None
+    standard_rolle: Optional[UserRole] = None
+    abhaengigkeit_von: Optional[str] = None
+    fristart_referenz: Optional[str] = None
+    fristart_offset_tage: Optional[int] = None
+    standard_punkte: Optional[float] = None
+    ist_aktiv: Optional[bool] = None
+
+class WorkflowSchrittTypOut(WorkflowSchrittTypBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# MandantWorkflowSchritt (per-mandant activation)
+# ─────────────────────────────────────────
+
+class MandantWorkflowSchrittBase(BaseModel):
+    schritt_typ_id: int
+    ist_aktiv: bool = True
+    aenderung_zum: Optional[datetime] = None
+
+class MandantWorkflowSchrittCreate(MandantWorkflowSchrittBase):
+    pass
+
+class MandantWorkflowSchrittOut(MandantWorkflowSchrittBase):
+    id: int
+    mandant_id: int
+    schritt_typ: WorkflowSchrittTypOut
+    erstellt_von: Optional[UserShort] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# PunkteKonfiguration (Workload Point Rules)
+# ─────────────────────────────────────────
+
+class PunkteKonfigurationBase(BaseModel):
+    name: str
+    kategorie_basis: str  # JSON
+    mitarbeiter_stufen: str  # JSON
+    branchen_faktoren: Optional[str] = None
+    zusatzmodul_punkte: Optional[str] = None
+    ist_aktiv: bool = True
+
+class PunkteKonfigurationCreate(PunkteKonfigurationBase):
+    pass
+
+class PunkteKonfigurationUpdate(BaseModel):
+    name: Optional[str] = None
+    kategorie_basis: Optional[str] = None
+    mitarbeiter_stufen: Optional[str] = None
+    branchen_faktoren: Optional[str] = None
+    zusatzmodul_punkte: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+
+class PunkteKonfigurationOut(PunkteKonfigurationBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# One-Screen: Mandant-Month Combined View
+# ─────────────────────────────────────────
+
+class FristStatusOut(BaseModel):
+    fristart: str
+    name: str
+    externer_stichtag: Optional[str] = None   # date string
+    interne_vorfrist: Optional[str] = None    # date string
+    ampel: str = "gruen"                       # gruen/gelb/rot
+    betroffene_schritte: List[str] = []        # titles of affected workflow steps
+
+class MandantMonatOneScreen(BaseModel):
+    mandant_id: int
+    mandant_name: str
+    monat: int
+    jahr: int
+    workflow: Optional[WorkflowInstanzOut] = None
+    tickets: List[TicketShort] = []
+    sonderaufgaben: List[SonderaufgabeOut] = []
+    fristen: List[FristStatusOut] = []
+    blocker: List[str] = []                    # descriptions of current blockers
+
+
+# ─────────────────────────────────────────
+# Reporting
+# ─────────────────────────────────────────
+
+class MitarbeiterPunkteReport(BaseModel):
+    user_id: int
+    full_name: str
+    email: str
+    role: UserRole
+    punkte_gesamt: float = 0.0
+    punkte_workflows: float = 0.0
+    punkte_sonderaufgaben: float = 0.0
+    mandanten_count: int = 0
+
+class MandantPunkteDetail(BaseModel):
+    mandant_id: int
+    mandant_name: str
+    monat: int
+    jahr: int
+    punkte: float = 0.0
+    schritte: List[str] = []
+    sonderaufgaben_punkte: float = 0.0

@@ -99,5 +99,46 @@ def run_migrations():
             conn.execute(text(
                 "ALTER TABLE users ADD COLUMN total_points_earned REAL DEFAULT 0.0"
             ))
+        if "is_archived" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN is_archived BOOLEAN DEFAULT FALSE"
+            ))
+        if "anonymisiert_am" not in user_cols:
+            conn.execute(text(
+                "ALTER TABLE users ADD COLUMN anonymisiert_am DATETIME"
+            ))
+
+        # tickets – new fields (v1.5)
+        ticket_cols = _cols("tickets")
+        if "unterkategorie" not in ticket_cols:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN unterkategorie TEXT"))
+        if "wiedervorlage_datum" not in ticket_cols:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN wiedervorlage_datum DATETIME"))
+        if "abbruch_grund" not in ticket_cols:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN abbruch_grund TEXT"))
+        if "workflow_item_id" not in ticket_cols:
+            conn.execute(text("ALTER TABLE tickets ADD COLUMN workflow_item_id INTEGER"))
+
+        # workflow_items – new fields (v1.5)
+        item_cols = _cols("workflow_items")
+        if "zugewiesen_an_id" not in item_cols:
+            conn.execute(text("ALTER TABLE workflow_items ADD COLUMN zugewiesen_an_id INTEGER"))
+        if "fristart_referenz" not in item_cols:
+            conn.execute(text("ALTER TABLE workflow_items ADD COLUMN fristart_referenz TEXT"))
+        if "ist_blockiert" not in item_cols:
+            conn.execute(text("ALTER TABLE workflow_items ADD COLUMN ist_blockiert BOOLEAN DEFAULT FALSE"))
+        if "blockiert_grund" not in item_cols:
+            conn.execute(text("ALTER TABLE workflow_items ADD COLUMN blockiert_grund TEXT"))
+
+        # workflow_vorlage_items – new fields (v1.5)
+        vli_cols = _cols("workflow_vorlage_items")
+        if "ist_optional_pro_mandant" not in vli_cols:
+            conn.execute(text("ALTER TABLE workflow_vorlage_items ADD COLUMN ist_optional_pro_mandant BOOLEAN DEFAULT FALSE"))
+        if "fristart_referenz" not in vli_cols:
+            conn.execute(text("ALTER TABLE workflow_vorlage_items ADD COLUMN fristart_referenz TEXT"))
+        if "fristart_offset_tage" not in vli_cols:
+            conn.execute(text("ALTER TABLE workflow_vorlage_items ADD COLUMN fristart_offset_tage INTEGER DEFAULT 0"))
+        if "standard_punkte" not in vli_cols:
+            conn.execute(text("ALTER TABLE workflow_vorlage_items ADD COLUMN standard_punkte REAL DEFAULT 1.0"))
 
         conn.commit()
