@@ -2,14 +2,14 @@ import { useState, FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { adminApi } from '../api/client'
-import type { User, Branche, AusgabewegConfig } from '../types'
+import type { User, Branche, AusgabewegConfig, Mandant } from '../types'
 
 interface Props {
   sachbearbeiterList: User[]
   onSubmit: (data: unknown) => void
   onClose: () => void
   loading?: boolean
-  initial?: Record<string, unknown>
+  initial?: Partial<Mandant>
   isEdit?: boolean
 }
 
