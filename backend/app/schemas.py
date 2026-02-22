@@ -298,6 +298,7 @@ class MandantUpdate(BaseModel):
     stundensatz: Optional[float] = None
     monatspauschale: Optional[float] = None
     ist_aktiv: Optional[bool] = None
+    aenderung_zum: Optional[datetime] = None
 
 
 class MandantOut(MandantBase):
@@ -306,6 +307,7 @@ class MandantOut(MandantBase):
     sachbearbeiter: Optional[UserShort] = None
     vertretung: Optional[UserShort] = None
     branchen_liste: List[BrancheOut] = []
+    aenderungen: List[MandantAenderungOut] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -317,6 +319,30 @@ class MandantShort(BaseModel):
     nummer: Optional[str] = None
     kategorie: MandantKategorie
     ist_aktiv: bool
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Mandant Änderungen
+# ─────────────────────────────────────────
+
+class MandantAenderungBase(BaseModel):
+    aenderung_zum: Optional[datetime] = None
+    aenderungen: str  # JSON string
+
+class MandantAenderungCreate(MandantAenderungBase):
+    pass
+
+class MandantAenderungOut(MandantAenderungBase):
+    id: int
+    mandant_id: int
+    status: str
+    erstellt_von: UserShort
+    erstellt_am: datetime
+    aktiviert_am: Optional[datetime] = None
+    abgebrochen_am: Optional[datetime] = None
+    abgebrochen_von: Optional[UserShort] = None
 
     model_config = {"from_attributes": True}
 
