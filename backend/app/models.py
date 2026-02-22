@@ -1,4 +1,5 @@
 import enum
+import json
 from datetime import datetime
 
 from sqlalchemy import (
@@ -56,9 +57,13 @@ class ChecklistItemStatus(str, enum.Enum):
 
 
 class TicketStatus(str, enum.Enum):
+    NEU = "neu"
     OFFEN = "offen"
-    IN_BEARBEITUNG = "in_bearbeitung"
-    BEANTWORTET = "beantwortet"
+    IN_BEARBEITUNG = "in_bearbeitung"          # backward compat
+    WARTET_AUF_MANDANT = "wartet_auf_mandant"
+    INTERN_IN_KLAERUNG = "intern_in_klaerung"
+    BEANTWORTET = "beantwortet"                # backward compat
+    GELOEST = "geloest"
     GESCHLOSSEN = "geschlossen"
 
 
@@ -66,13 +71,20 @@ class TicketPrioritaet(str, enum.Enum):
     NIEDRIG = "niedrig"
     NORMAL = "normal"
     HOCH = "hoch"
-    DRINGEND = "dringend"
+    KRITISCH = "kritisch"
+    DRINGEND = "dringend"   # backward compat alias
 
 
 class EskalationStufe(str, enum.Enum):
     REMINDER = "reminder"
     TEAMLEITUNG = "teamleitung"
     LEITUNG = "leitung"
+
+
+class EmailLogStatus(str, enum.Enum):
+    GESENDET = "gesendet"
+    ZUGESTELLT = "zugestellt"
+    GEBOUNCED = "gebounced"
 
 
 # ─────────────────────────────────────────
@@ -140,6 +152,7 @@ class Mandant(Base):
     monatspauschale = Column(Float)
 
     ist_aktiv = Column(Boolean, default=True)
+    onboarding_abgeschlossen = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -150,6 +163,7 @@ class Mandant(Base):
     tickets = relationship("Ticket", back_populates="mandant")
     dokumente = relationship("Dokument", back_populates="mandant")
     eskalationen = relationship("EskalationLog", back_populates="mandant")
+    email_logs = relationship("EmailLog", back_populates="mandant")
 
 
 # ─────────────────────────────────────────
@@ -164,6 +178,7 @@ class WorkflowVorlage(Base):
     beschreibung = Column(Text)
     branche = Column(String)  # optional branche filter
     ist_standard = Column(Boolean, default=False)
+    ist_onboarding = Column(Boolean, default=False)
     erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
@@ -214,6 +229,8 @@ class WorkflowInstanz(Base):
     endabrechnung_am = Column(DateTime, nullable=True)
     versand_am = Column(DateTime, nullable=True)
     abgeschlossen_am = Column(DateTime, nullable=True)
+    wiedereroeffnet_am = Column(DateTime, nullable=True)
+    wiedereroeffnet_begruendung = Column(Text, nullable=True)
 
     notizen = Column(Text)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -269,11 +286,18 @@ class Ticket(Base):
 
     titel = Column(String, nullable=False)
     beschreibung = Column(Text)
-    status = Column(Enum(TicketStatus), default=TicketStatus.OFFEN)
+    status = Column(Enum(TicketStatus), default=TicketStatus.NEU)
     prioritaet = Column(Enum(TicketPrioritaet), default=TicketPrioritaet.NORMAL)
     kategorie = Column(String)
 
+    # Month reference (which payroll month this ticket belongs to)
+    monat = Column(Integer, nullable=True)
+    jahr = Column(Integer, nullable=True)
+
+    # SLA & Escalation
     faellig_bis = Column(DateTime, nullable=True)
+    eskalationsstufe = Column(Enum(EskalationStufe), nullable=True)
+
     geschlossen_am = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -282,7 +306,7 @@ class Ticket(Base):
     workflow_instanz = relationship("WorkflowInstanz", back_populates="tickets")
     erstellt_von = relationship("User", back_populates="tickets_erstellt", foreign_keys=[erstellt_von_id])
     zugewiesen_an = relationship("User", foreign_keys=[zugewiesen_an_id])
-    kommentare = relationship("TicketKommentar", back_populates="ticket")
+    kommentare = relationship("TicketKommentar", back_populates="ticket", order_by="TicketKommentar.created_at")
 
 
 class TicketKommentar(Base):
@@ -292,10 +316,29 @@ class TicketKommentar(Base):
     ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False)
     autor_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     inhalt = Column(Text, nullable=False)
+    ist_intern = Column(Boolean, default=False, nullable=False)  # internal-only, not visible to client
+    zitat_id = Column(Integer, ForeignKey("ticket_kommentare.id"), nullable=True)  # quote/reply
     created_at = Column(DateTime, default=datetime.utcnow)
 
     ticket = relationship("Ticket", back_populates="kommentare")
     autor = relationship("User", back_populates="ticket_kommentare")
+    zitat = relationship("TicketKommentar", remote_side="TicketKommentar.id", foreign_keys=[zitat_id])
+
+
+# ─────────────────────────────────────────
+# SLA Konfiguration
+# ─────────────────────────────────────────
+
+class SLAKonfiguration(Base):
+    __tablename__ = "sla_konfigurationen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    kategorie = Column(String, nullable=False)          # ticket category name
+    prioritaet = Column(Enum(TicketPrioritaet), nullable=True)  # null = applies to all prios
+    sla_stunden = Column(Integer, nullable=False, default=48)   # hours until SLA breach
+    eskalation_stufe1_stunden = Column(Integer, default=72)     # hours until level-1 escalation
+    eskalation_stufe2_stunden = Column(Integer, default=96)     # hours until level-2 escalation
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # ─────────────────────────────────────────
@@ -317,6 +360,7 @@ class Dokument(Base):
     speicherort = Column(String)    # path or URL
     kategorie = Column(String)
     notiz = Column(Text)
+    ist_geloescht = Column(Boolean, default=False)  # logical delete only
     created_at = Column(DateTime, default=datetime.utcnow)
 
     mandant = relationship("Mandant", back_populates="dokumente")
@@ -345,3 +389,65 @@ class EskalationLog(Base):
     mandant = relationship("Mandant", back_populates="eskalationen")
     workflow_instanz = relationship("WorkflowInstanz", back_populates="eskalationen")
     eskaliert_an = relationship("User", back_populates="eskalationen", foreign_keys=[eskaliert_an_id])
+
+
+# ─────────────────────────────────────────
+# Audit Log (append-only, manipulation-protected)
+# ─────────────────────────────────────────
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    objekt_typ = Column(String, nullable=False)      # e.g. "mandant", "ticket", "workflow"
+    objekt_id = Column(Integer, nullable=True)
+    mandant_id = Column(Integer, nullable=True)       # denormalized for fast filtering
+    monat = Column(Integer, nullable=True)
+    jahr = Column(Integer, nullable=True)
+    aktionstyp = Column(String, nullable=False)       # e.g. "erstellt", "statusaenderung"
+    alter_wert = Column(Text, nullable=True)          # JSON string
+    neuer_wert = Column(Text, nullable=True)          # JSON string
+    benutzer_id = Column(Integer, nullable=True)
+    benutzerrolle = Column(String, nullable=True)
+    zeitstempel = Column(DateTime, default=datetime.utcnow, nullable=False)
+    ip_adresse = Column(String, nullable=True)
+    beschreibung = Column(Text, nullable=True)        # human-readable summary
+
+
+# ─────────────────────────────────────────
+# Email Templates & Log
+# ─────────────────────────────────────────
+
+class EmailTemplate(Base):
+    __tablename__ = "email_templates"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    betreff = Column(String, nullable=False)
+    html_inhalt = Column(Text, nullable=False)
+    text_inhalt = Column(Text, nullable=True)
+    beschreibung = Column(Text, nullable=True)
+    typ = Column(String, nullable=True)              # "onboarding_welcome", "onboarding_reminder", "unterlagen_reminder"
+    ist_aktiv = Column(Boolean, default=True)
+    reihenfolge = Column(Integer, default=0)         # for onboarding sequence ordering
+    verzoegerung_tage = Column(Integer, default=0)   # days after previous email in sequence
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    logs = relationship("EmailLog", back_populates="template")
+
+
+class EmailLog(Base):
+    __tablename__ = "email_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    template_id = Column(Integer, ForeignKey("email_templates.id"), nullable=True)
+    mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
+    empfaenger = Column(String, nullable=False)
+    betreff = Column(String, nullable=False)
+    status = Column(Enum(EmailLogStatus), default=EmailLogStatus.GESENDET)
+    gesendet_am = Column(DateTime, default=datetime.utcnow)
+    fehler = Column(Text, nullable=True)
+
+    template = relationship("EmailTemplate", back_populates="logs")
+    mandant = relationship("Mandant", back_populates="email_logs")

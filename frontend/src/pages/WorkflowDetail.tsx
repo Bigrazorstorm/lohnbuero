@@ -1,6 +1,7 @@
+import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, Clock, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Check, Clock, AlertCircle, Lock } from 'lucide-react'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -25,6 +26,9 @@ export default function WorkflowDetail() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { user } = useAuthStore()
+  const [reOpenReason, setReOpenReason] = useState('')
+  const [showReOpen, setShowReOpen] = useState(false)
+  const [closingErrors, setClosingErrors] = useState<string[]>([])
 
   const { data: wf, isLoading } = useQuery<WorkflowInstanz>({
     queryKey: ['workflow', id],
@@ -43,9 +47,19 @@ export default function WorkflowDetail() {
       workflowsApi.update(Number(id), data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workflow', id] })
+      setClosingErrors([])
+      setShowReOpen(false)
       toast.success('Gespeichert')
     },
-    onError: () => toast.error('Fehler'),
+    onError: (err: unknown) => {
+      const detail = (err as { response?: { data?: { detail?: { fehler?: string[]; message?: string } | string } } }).response?.data?.detail
+      if (detail && typeof detail === 'object' && 'fehler' in detail) {
+        setClosingErrors(detail.fehler ?? [])
+        toast.error(detail.message ?? 'Monatsabschluss nicht möglich')
+      } else {
+        toast.error(typeof detail === 'string' ? detail : 'Fehler')
+      }
+    },
   })
 
   if (isLoading) return <div className="text-center py-12 text-gray-400">Laden…</div>

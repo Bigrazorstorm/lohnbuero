@@ -4,11 +4,15 @@ from fastapi.staticfiles import StaticFiles
 import os
 
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, engine, run_migrations
 from app.routers import auth, dashboard, dokumente, mandanten, tickets, users, workflows
+from app.routers import audit, email_templates
 
-# Create all tables
+# Create all tables (new ones)
 Base.metadata.create_all(bind=engine)
+
+# Safely migrate existing tables (add new columns)
+run_migrations()
 
 app = FastAPI(
     title=settings.app_name,
@@ -33,6 +37,8 @@ app.include_router(workflows.router)
 app.include_router(tickets.router)
 app.include_router(dokumente.router)
 app.include_router(dashboard.router)
+app.include_router(audit.router)
+app.include_router(email_templates.router)
 
 # Serve uploaded files
 uploads_dir = "uploads"

@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Briefcase, CheckSquare, MessageSquare,
-  FileText, Settings, Building2
+  FileText, Building2, Shield, Mail
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 
@@ -12,6 +12,8 @@ const navItems = [
   { to: '/tickets', label: 'Rückfragen', icon: MessageSquare, roles: ['admin', 'teamleitung', 'sachbearbeiter', 'pruefer', 'mandant'] },
   { to: '/users', label: 'Benutzer', icon: Users, roles: ['admin'] },
   { to: '/vorlagen', label: 'Vorlagen', icon: FileText, roles: ['admin', 'teamleitung'] },
+  { to: '/email-templates', label: 'E-Mail-Templates', icon: Mail, roles: ['admin', 'teamleitung'] },
+  { to: '/audit', label: 'Audit-Log', icon: Shield, roles: ['admin', 'teamleitung'] },
 ]
 
 export default function Sidebar() {

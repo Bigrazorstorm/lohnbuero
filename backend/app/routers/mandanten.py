@@ -1,8 +1,9 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from app import audit_service
 from app.auth import get_current_user, require_admin_or_teamleitung, require_staff
 from app.database import get_db
 from app.models import Mandant, MandantKategorie, User
@@ -21,7 +22,6 @@ def list_mandanten(
 ):
     q = db.query(Mandant)
 
-    # Mandant portal users only see their own client
     from app.models import UserRole
     if current_user.role == UserRole.MANDANT:
         q = q.filter(Mandant.portal_user_id == current_user.id)
@@ -39,8 +39,9 @@ def list_mandanten(
 @router.post("/", response_model=MandantOut, status_code=status.HTTP_201_CREATED)
 def create_mandant(
     data: MandantCreate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin_or_teamleitung),
+    current_user: User = Depends(require_admin_or_teamleitung),
 ):
     if data.nummer:
         existing = db.query(Mandant).filter(Mandant.nummer == data.nummer).first()
@@ -49,8 +50,31 @@ def create_mandant(
 
     mandant = Mandant(**data.model_dump())
     db.add(mandant)
+    db.flush()
+
+    audit_service.log(
+        db,
+        objekt_typ="mandant",
+        objekt_id=mandant.id,
+        mandant_id=mandant.id,
+        aktionstyp="erstellt",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        neuer_wert={"name": mandant.name, "nummer": mandant.nummer, "kategorie": mandant.kategorie},
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Mandant '{mandant.name}' angelegt",
+    )
     db.commit()
     db.refresh(mandant)
+
+    # Trigger onboarding email sequence (best-effort)
+    try:
+        from app.routers.email_templates import send_onboarding_emails
+        send_onboarding_emails(db, mandant)
+        db.commit()
+    except Exception:
+        pass
+
     return mandant
 
 
@@ -75,16 +99,33 @@ def get_mandant(
 def update_mandant(
     mandant_id: int,
     data: MandantUpdate,
+    request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin_or_teamleitung),
+    current_user: User = Depends(require_admin_or_teamleitung),
 ):
     mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
     if not mandant:
         raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
 
-    for k, v in data.model_dump(exclude_unset=True).items():
+    update_data = data.model_dump(exclude_unset=True)
+    old_vals = {k: getattr(mandant, k) for k in update_data}
+
+    for k, v in update_data.items():
         setattr(mandant, k, v)
 
+    audit_service.log(
+        db,
+        objekt_typ="mandant",
+        objekt_id=mandant.id,
+        mandant_id=mandant.id,
+        aktionstyp="stammdaten_geaendert",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        alter_wert=old_vals,
+        neuer_wert=update_data,
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Stammdaten von Mandant '{mandant.name}' geändert",
+    )
     db.commit()
     db.refresh(mandant)
     return mandant
@@ -93,11 +134,28 @@ def update_mandant(
 @router.delete("/{mandant_id}", status_code=status.HTTP_204_NO_CONTENT)
 def deactivate_mandant(
     mandant_id: int,
+    request: Request,
     db: Session = Depends(get_db),
-    _: User = Depends(require_admin_or_teamleitung),
+    current_user: User = Depends(require_admin_or_teamleitung),
 ):
     mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
     if not mandant:
         raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
+
+    old_aktiv = mandant.ist_aktiv
     mandant.ist_aktiv = False
+
+    audit_service.log(
+        db,
+        objekt_typ="mandant",
+        objekt_id=mandant.id,
+        mandant_id=mandant.id,
+        aktionstyp="archiviert",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        alter_wert={"ist_aktiv": old_aktiv},
+        neuer_wert={"ist_aktiv": False},
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Mandant '{mandant.name}' archiviert",
+    )
     db.commit()

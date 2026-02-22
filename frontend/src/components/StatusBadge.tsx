@@ -17,16 +17,24 @@ const workflowLabels: Record<WorkflowStatus, string> = {
 }
 
 const ticketColors: Record<TicketStatus, string> = {
+  neu: 'bg-sky-100 text-sky-700',
   offen: 'bg-orange-100 text-orange-700',
   in_bearbeitung: 'bg-blue-100 text-blue-700',
+  wartet_auf_mandant: 'bg-purple-100 text-purple-700',
+  intern_in_klaerung: 'bg-indigo-100 text-indigo-700',
   beantwortet: 'bg-teal-100 text-teal-700',
+  geloest: 'bg-green-100 text-green-700',
   geschlossen: 'bg-gray-100 text-gray-600',
 }
 
 const ticketLabels: Record<TicketStatus, string> = {
+  neu: 'Neu',
   offen: 'Offen',
   in_bearbeitung: 'In Bearbeitung',
+  wartet_auf_mandant: 'Wartet auf Mandant',
+  intern_in_klaerung: 'Intern in Klärung',
   beantwortet: 'Beantwortet',
+  geloest: 'Gelöst',
   geschlossen: 'Geschlossen',
 }
 
@@ -34,6 +42,7 @@ const prioritaetColors: Record<TicketPrioritaet, string> = {
   niedrig: 'bg-gray-100 text-gray-600',
   normal: 'bg-blue-100 text-blue-700',
   hoch: 'bg-orange-100 text-orange-700',
+  kritisch: 'bg-red-100 text-red-700',
   dringend: 'bg-red-100 text-red-700',
 }
 
@@ -41,6 +50,7 @@ const prioritaetLabels: Record<TicketPrioritaet, string> = {
   niedrig: 'Niedrig',
   normal: 'Normal',
   hoch: 'Hoch',
+  kritisch: 'Kritisch',
   dringend: 'Dringend',
 }
 

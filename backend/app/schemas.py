@@ -4,7 +4,8 @@ from pydantic import BaseModel, EmailStr
 
 from app.models import (
     UserRole, MandantKategorie, Abgabeweg, WorkflowStatus,
-    Ampelstatus, ChecklistItemStatus, TicketStatus, TicketPrioritaet, EskalationStufe
+    Ampelstatus, ChecklistItemStatus, TicketStatus, TicketPrioritaet,
+    EskalationStufe, EmailLogStatus,
 )
 
 # ─────────────────────────────────────────
@@ -158,6 +159,7 @@ class WorkflowVorlageBase(BaseModel):
     beschreibung: Optional[str] = None
     branche: Optional[str] = None
     ist_standard: bool = False
+    ist_onboarding: bool = False
 
 
 class WorkflowVorlageCreate(WorkflowVorlageBase):
@@ -206,6 +208,7 @@ class WorkflowInstanzUpdate(BaseModel):
     endabrechnung_am: Optional[datetime] = None
     versand_am: Optional[datetime] = None
     abgeschlossen_am: Optional[datetime] = None
+    wiedereroeffnet_begruendung: Optional[str] = None
     notizen: Optional[str] = None
 
 
@@ -276,6 +279,8 @@ class WorkflowInstanzShort(BaseModel):
 
 class TicketKommentarCreate(BaseModel):
     inhalt: str
+    ist_intern: bool = False
+    zitat_id: Optional[int] = None
 
 
 class TicketKommentarOut(BaseModel):
@@ -283,6 +288,8 @@ class TicketKommentarOut(BaseModel):
     ticket_id: int
     autor: UserShort
     inhalt: str
+    ist_intern: bool
+    zitat_id: Optional[int] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -297,6 +304,8 @@ class TicketBase(BaseModel):
     kategorie: Optional[str] = None
     faellig_bis: Optional[datetime] = None
     zugewiesen_an_id: Optional[int] = None
+    monat: Optional[int] = None
+    jahr: Optional[int] = None
 
 
 class TicketCreate(TicketBase):
@@ -311,11 +320,13 @@ class TicketUpdate(BaseModel):
     kategorie: Optional[str] = None
     faellig_bis: Optional[datetime] = None
     zugewiesen_an_id: Optional[int] = None
+    eskalationsstufe: Optional[EskalationStufe] = None
 
 
 class TicketOut(TicketBase):
     id: int
     status: TicketStatus
+    eskalationsstufe: Optional[EskalationStufe] = None
     erstellt_von: UserShort
     zugewiesen_an: Optional[UserShort] = None
     mandant: MandantShort
@@ -332,8 +343,108 @@ class TicketShort(BaseModel):
     titel: str
     status: TicketStatus
     prioritaet: TicketPrioritaet
+    eskalationsstufe: Optional[EskalationStufe] = None
     mandant: MandantShort
     created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# SLA Konfiguration
+# ─────────────────────────────────────────
+
+class SLAKonfigurationBase(BaseModel):
+    kategorie: str
+    prioritaet: Optional[TicketPrioritaet] = None
+    sla_stunden: int = 48
+    eskalation_stufe1_stunden: int = 72
+    eskalation_stufe2_stunden: int = 96
+
+
+class SLAKonfigurationCreate(SLAKonfigurationBase):
+    pass
+
+
+class SLAKonfigurationOut(SLAKonfigurationBase):
+    id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Audit Log
+# ─────────────────────────────────────────
+
+class AuditLogOut(BaseModel):
+    id: int
+    objekt_typ: str
+    objekt_id: Optional[int] = None
+    mandant_id: Optional[int] = None
+    monat: Optional[int] = None
+    jahr: Optional[int] = None
+    aktionstyp: str
+    alter_wert: Optional[str] = None
+    neuer_wert: Optional[str] = None
+    benutzer_id: Optional[int] = None
+    benutzerrolle: Optional[str] = None
+    zeitstempel: datetime
+    ip_adresse: Optional[str] = None
+    beschreibung: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Email Templates
+# ─────────────────────────────────────────
+
+class EmailTemplateBase(BaseModel):
+    name: str
+    betreff: str
+    html_inhalt: str
+    text_inhalt: Optional[str] = None
+    beschreibung: Optional[str] = None
+    typ: Optional[str] = None
+    ist_aktiv: bool = True
+    reihenfolge: int = 0
+    verzoegerung_tage: int = 0
+
+
+class EmailTemplateCreate(EmailTemplateBase):
+    pass
+
+
+class EmailTemplateUpdate(BaseModel):
+    name: Optional[str] = None
+    betreff: Optional[str] = None
+    html_inhalt: Optional[str] = None
+    text_inhalt: Optional[str] = None
+    beschreibung: Optional[str] = None
+    typ: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+    reihenfolge: Optional[int] = None
+    verzoegerung_tage: Optional[int] = None
+
+
+class EmailTemplateOut(EmailTemplateBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class EmailLogOut(BaseModel):
+    id: int
+    template_id: Optional[int] = None
+    mandant_id: int
+    empfaenger: str
+    betreff: str
+    status: EmailLogStatus
+    gesendet_am: datetime
+    fehler: Optional[str] = None
 
     model_config = {"from_attributes": True}
 

@@ -39,6 +39,7 @@ export interface Mandant {
   stundensatz?: number
   monatspauschale?: number
   ist_aktiv: boolean
+  onboarding_abgeschlossen?: boolean
   sachbearbeiter?: UserShort
   vertretung?: UserShort
   created_at: string
@@ -90,6 +91,7 @@ export interface WorkflowInstanz {
   endabrechnung_am?: string
   versand_am?: string
   abgeschlossen_am?: string
+  wiedereroeffnet_am?: string
   notizen?: string
   created_at: string
   items: WorkflowItem[]
@@ -105,14 +107,28 @@ export interface WorkflowInstanzShort {
   mandant?: { id: number; name: string; nummer?: string; kategorie: MandantKategorie; ist_aktiv: boolean }
 }
 
-export type TicketStatus = 'offen' | 'in_bearbeitung' | 'beantwortet' | 'geschlossen'
-export type TicketPrioritaet = 'niedrig' | 'normal' | 'hoch' | 'dringend'
+// Extended ticket statuses per Nachtrag v1.2
+export type TicketStatus =
+  | 'neu'
+  | 'offen'
+  | 'in_bearbeitung'          // backward compat
+  | 'wartet_auf_mandant'
+  | 'intern_in_klaerung'
+  | 'beantwortet'             // backward compat
+  | 'geloest'
+  | 'geschlossen'
+
+export type TicketPrioritaet = 'niedrig' | 'normal' | 'hoch' | 'kritisch' | 'dringend'
+
+export type EskalationStufe = 'reminder' | 'teamleitung' | 'leitung'
 
 export interface TicketKommentar {
   id: number
   ticket_id: number
   autor: UserShort
   inhalt: string
+  ist_intern: boolean
+  zitat_id?: number
   created_at: string
 }
 
@@ -129,6 +145,9 @@ export interface Ticket {
   prioritaet: TicketPrioritaet
   kategorie?: string
   faellig_bis?: string
+  eskalationsstufe?: EskalationStufe
+  monat?: number
+  jahr?: number
   geschlossen_am?: string
   created_at: string
   updated_at: string
@@ -179,7 +198,61 @@ export interface WorkflowVorlage {
   beschreibung?: string
   branche?: string
   ist_standard: boolean
+  ist_onboarding: boolean
   erstellt_von_id?: number
   created_at: string
   items: WorkflowVorlageItem[]
+}
+
+// ── Audit Log ──────────────────────────────────────────────
+export interface AuditLog {
+  id: number
+  objekt_typ: string
+  objekt_id?: number
+  mandant_id?: number
+  monat?: number
+  jahr?: number
+  aktionstyp: string
+  alter_wert?: string
+  neuer_wert?: string
+  benutzer_id?: number
+  benutzerrolle?: string
+  zeitstempel: string
+  ip_adresse?: string
+  beschreibung?: string
+}
+
+// ── Email Templates ────────────────────────────────────────
+export interface EmailTemplate {
+  id: number
+  name: string
+  betreff: string
+  html_inhalt: string
+  text_inhalt?: string
+  beschreibung?: string
+  typ?: string
+  ist_aktiv: boolean
+  reihenfolge: number
+  verzoegerung_tage: number
+  created_at: string
+  updated_at: string
+}
+
+export interface EmailLog {
+  id: number
+  template_id?: number
+  mandant_id: number
+  empfaenger: string
+  betreff: string
+  status: 'gesendet' | 'zugestellt' | 'gebounced'
+  gesendet_am: string
+  fehler?: string
+}
+
+export interface TicketKPIs {
+  gesamt: number
+  offen: number
+  eskaliert: number
+  kritisch_offen: number
+  avg_antwortzeit_stunden?: number
 }

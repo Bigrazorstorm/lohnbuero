@@ -10,6 +10,8 @@ import WorkflowDetail from './pages/WorkflowDetail'
 import Tickets from './pages/Tickets'
 import Users from './pages/Users'
 import Vorlagen from './pages/Vorlagen'
+import Audit from './pages/Audit'
+import EmailTemplates from './pages/EmailTemplates'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -61,6 +63,8 @@ export default function App() {
           }
         />
         <Route path="vorlagen" element={<Vorlagen />} />
+        <Route path="email-templates" element={<EmailTemplates />} />
+        <Route path="audit" element={<Audit />} />
       </Route>
 
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

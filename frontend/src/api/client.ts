@@ -73,8 +73,10 @@ export const ticketsApi = {
   get: (id: number) => api.get(`/tickets/${id}`),
   create: (data: unknown) => api.post('/tickets/', data),
   update: (id: number, data: unknown) => api.patch(`/tickets/${id}`, data),
-  addKommentar: (id: number, inhalt: string) =>
-    api.post(`/tickets/${id}/kommentare`, { inhalt }),
+  eskalieren: (id: number) => api.post(`/tickets/${id}/eskalieren`),
+  addKommentar: (id: number, inhalt: string, istIntern = false, zitatId?: number) =>
+    api.post(`/tickets/${id}/kommentare`, { inhalt, ist_intern: istIntern, zitat_id: zitatId }),
+  kpis: () => api.get('/tickets/kpis'),
 }
 
 // ── Dashboard ─────────────────────────────────
@@ -91,4 +93,28 @@ export const dokumenteApi = {
       headers: { 'Content-Type': 'multipart/form-data' },
     }),
   delete: (id: number) => api.delete(`/dokumente/${id}`),
+}
+
+// ── Audit Log ─────────────────────────────────
+export const auditApi = {
+  list: (params?: Record<string, unknown>) => api.get('/audit/', { params }),
+  exportCsv: (params?: Record<string, unknown>) =>
+    api.get('/audit/export/csv', { params, responseType: 'blob' }),
+}
+
+// ── Email Templates ───────────────────────────
+export const emailTemplatesApi = {
+  list: (params?: Record<string, unknown>) => api.get('/email-templates/', { params }),
+  get: (id: number) => api.get(`/email-templates/${id}`),
+  create: (data: unknown) => api.post('/email-templates/', data),
+  update: (id: number, data: unknown) => api.patch(`/email-templates/${id}`, data),
+  delete: (id: number) => api.delete(`/email-templates/${id}`),
+  preview: (id: number, mandantId?: number) =>
+    api.post(`/email-templates/${id}/preview`, null, {
+      params: mandantId ? { mandant_id: mandantId } : {},
+    }),
+  send: (id: number, mandantId: number) =>
+    api.post(`/email-templates/${id}/send`, null, { params: { mandant_id: mandantId } }),
+  logs: (mandantId?: number) =>
+    api.get('/email-templates/logs/', { params: mandantId ? { mandant_id: mandantId } : {} }),
 }
