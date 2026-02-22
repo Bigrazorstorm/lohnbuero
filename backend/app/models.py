@@ -245,7 +245,7 @@ class Fristenprofil(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
-    mandant = relationship("Mandant", back_populates="fristenprofil", foreign_keys=[mandant_id])
+    mandant = relationship("Mandant", back_populates="fristenprofil", foreign_keys=[mandant_id], remote_side="Mandant.id")
     regeln = relationship("Fristenregel", back_populates="profil", order_by="Fristenregel.position")
 
 
