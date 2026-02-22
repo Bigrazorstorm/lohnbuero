@@ -204,67 +204,68 @@ export default function WorkflowDetail() {
                 {wf.items.length === 0 ? (
                   <p className="text-sm text-gray-400 text-center py-4">Keine zusätzlichen Checklisten-Einträge</p>
                 ) : (
-                {wf.items.map((item) => {
-                  const isOverdue = item.faellig_datum && new Date(item.faellig_datum) < new Date() && item.status !== 'erledigt'
-                  return (
-                    <div
-                      key={item.id}
-                      className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
-                        item.status === 'erledigt'
-                          ? 'border-green-100 bg-green-50'
-                          : isOverdue
-                          ? 'border-red-100 bg-red-50'
-                          : 'border-gray-100 hover:border-gray-200'
-                      }`}
-                    >
-                      {/* Checkbox */}
-                      <button
-                        disabled={isMandant || itemMutation.isPending}
-                        onClick={() => toggleItem(item.id, item.status)}
-                        className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${
-                          item.status === 'erledigt'
-                            ? 'bg-green-500 border-green-500 text-white'
-                            : 'border-gray-300 hover:border-green-400'
-                        } ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                      >
-                        {item.status === 'erledigt' && <Check size={12} />}
-                      </button>
+                  <>
+                    {wf.items.map((item) => {
+                      const isOverdue = item.faellig_datum && new Date(item.faellig_datum) < new Date() && item.status !== 'erledigt'
+                      return (
+                        <div
+                          key={item.id}
+                          className={`flex items-start gap-3 p-3 rounded-lg border transition-colors ${
+                            item.status === 'erledigt'
+                              ? 'border-green-100 bg-green-50'
+                              : isOverdue
+                              ? 'border-red-100 bg-red-50'
+                              : 'border-gray-100 hover:border-gray-200'
+                          }`}
+                        >
+                          {/* Checkbox */}
+                          <button
+                            disabled={isMandant || itemMutation.isPending}
+                            onClick={() => toggleItem(item.id, item.status)}
+                            className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${
+                              item.status === 'erledigt'
+                                ? 'bg-green-500 border-green-500 text-white'
+                                : 'border-gray-300 hover:border-green-400'
+                            } ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                          >
+                            {item.status === 'erledigt' && <Check size={12} />}
+                          </button>
 
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-sm font-medium ${item.status === 'erledigt' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
-                            {item.titel}
-                          </span>
-                          {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
-                          {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
-                          {item.erfordert_dokument && <span className="badge bg-blue-100 text-blue-600 text-xs">Dokument</span>}
-                          {isOverdue && <AlertCircle size={14} className="text-red-500" />}
-                        </div>
-                        {item.beschreibung && (
-                          <p className="text-xs text-gray-500 mt-0.5">{item.beschreibung}</p>
-                        )}
-                        <div className="flex items-center gap-3 mt-1">
-                          {item.faellig_datum && (
-                            <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
-                              <Clock size={11} />
-                              Fällig: {format(new Date(item.faellig_datum), 'dd.MM.yyyy', { locale: de })}
-                            </span>
-                          )}
-                          {item.erledigt_von && (
-                            <span className="text-xs text-gray-400">
-                              Erledigt von {item.erledigt_von.full_name}
-                              {item.erledigt_am && ` · ${format(new Date(item.erledigt_am), 'dd.MM.', { locale: de })}`}
-                            </span>
-                          )}
-                        </div>
-                      </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className={`text-sm font-medium ${item.status === 'erledigt' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>
+                                {item.titel}
+                              </span>
+                              {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
+                              {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
+                              {item.erfordert_dokument && <span className="badge bg-blue-100 text-blue-600 text-xs">Dokument</span>}
+                              {isOverdue && <AlertCircle size={14} className="text-red-500" />}
+                            </div>
+                            {item.beschreibung && (
+                              <p className="text-xs text-gray-500 mt-0.5">{item.beschreibung}</p>
+                            )}
+                            <div className="flex items-center gap-3 mt-1">
+                              {item.faellig_datum && (
+                                <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                                  <Clock size={11} />
+                                  Fällig: {format(new Date(item.faellig_datum), 'dd.MM.yyyy', { locale: de })}
+                                </span>
+                              )}
+                              {item.erledigt_von && (
+                                <span className="text-xs text-gray-400">
+                                  Erledigt von {item.erledigt_von.full_name}
+                                  {item.erledigt_am && ` · ${format(new Date(item.erledigt_am), 'dd.MM.', { locale: de })}`}
+                                </span>
+                              )}
+                            </div>
+                          </div>
 
-                      <ChecklistStatusBadge status={item.status} />
-                    </div>
-                  )
-                })}
-              </div>
-            )}
+                          <ChecklistStatusBadge status={item.status} />
+                        </div>
+                      )
+                    })}
+                  </>
+                )}
           </div>
         </div>
 
