@@ -236,6 +236,16 @@ def update_workflow(
     old_status = instanz.status
     new_status = update_data.get("status")
 
+    # Kernel process step keys
+    KERNEL_PROCESS_KEYS = {
+        'unterlagen_eingegangen_am', 'probe_abrechnung_am', 'probe_geprueft_am',
+        'mandant_freigabe_am', 'endabrechnung_am', 'versand_am', 'abgeschlossen_am'
+    }
+
+    # Detect if this is a kernel process step update
+    kernel_updates = {k: v for k, v in update_data.items() if k in KERNEL_PROCESS_KEYS}
+    is_kernel_update = bool(kernel_updates)
+
     # ── Month-end closing validation ─────────────────────────
     if new_status == WorkflowStatus.ABGESCHLOSSEN and old_status != WorkflowStatus.ABGESCHLOSSEN:
         errors = _validate_monatsabschluss(db, instanz)
@@ -256,21 +266,44 @@ def update_workflow(
     for k, v in update_data.items():
         setattr(instanz, k, v)
 
-    audit_service.log(
-        db,
-        objekt_typ="workflow",
-        objekt_id=instanz.id,
-        mandant_id=instanz.mandant_id,
-        monat=instanz.monat,
-        jahr=instanz.jahr,
-        aktionstyp="statuswechsel" if new_status else "aktualisiert",
-        benutzer_id=current_user.id,
-        benutzerrolle=current_user.role.value,
-        alter_wert={"status": old_status} if new_status else None,
-        neuer_wert=update_data,
-        ip_adresse=request.client.host if request.client else None,
-        beschreibung=f"Workflow {instanz.monat}/{instanz.jahr} geändert",
-    )
+    # Determine action type based on what was updated
+    if is_kernel_update:
+        # Get old values for kernel process steps
+        old_kernel_values = {k: getattr(instanz, k, None) for k in KERNEL_PROCESS_KEYS}
+        # Remove None values
+        old_kernel_values = {k: v for k, v in old_kernel_values.items() if v is not None}
+        
+        audit_service.log(
+            db,
+            objekt_typ="workflow",
+            objekt_id=instanz.id,
+            mandant_id=instanz.mandant_id,
+            monat=instanz.monat,
+            jahr=instanz.jahr,
+            aktionstyp="kernprozess",
+            benutzer_id=current_user.id,
+            benutzerrolle=current_user.role.value,
+            alter_wert=old_kernel_values if old_kernel_values else None,
+            neuer_wert=kernel_updates,
+            ip_adresse=request.client.host if request.client else None,
+            beschreibung=f"Kernprozess aktualisiert für Workflow {instanz.monat}/{instanz.jahr}",
+        )
+    else:
+        audit_service.log(
+            db,
+            objekt_typ="workflow",
+            objekt_id=instanz.id,
+            mandant_id=instanz.mandant_id,
+            monat=instanz.monat,
+            jahr=instanz.jahr,
+            aktionstyp="statuswechsel" if new_status else "aktualisiert",
+            benutzer_id=current_user.id,
+            benutzerrolle=current_user.role.value,
+            alter_wert={"status": old_status} if new_status else None,
+            neuer_wert=update_data,
+            ip_adresse=request.client.host if request.client else None,
+            beschreibung=f"Workflow {instanz.monat}/{instanz.jahr} geändert",
+        )
     db.commit()
     db.refresh(instanz)
     return instanz
@@ -358,11 +391,11 @@ def update_workflow_item(
         mandant_id=item.instanz.mandant_id if item.instanz else None,
         monat=item.instanz.monat if item.instanz else None,
         jahr=item.instanz.jahr if item.instanz else None,
-        aktionstyp="statusaenderung",
+        aktionstyp="item_status",
         benutzer_id=current_user.id,
         benutzerrolle=current_user.role.value,
         alter_wert={"status": old_status},
-        neuer_wert=update_data,
+        neuer_wert={"status": update_data.get("status"), "titel": item.titel},
         ip_adresse=request.client.host if request.client else None,
         beschreibung=f"Workflow-Schritt '{item.titel}' → {update_data.get('status', old_status)}",
     )

@@ -21,6 +21,7 @@ router = APIRouter(prefix="/api/audit", tags=["audit"])
 def list_audit(
     mandant_id: Optional[int] = Query(None),
     objekt_typ: Optional[str] = Query(None),
+    objekt_id: Optional[int] = Query(None),
     aktionstyp: Optional[str] = Query(None),
     benutzer_id: Optional[int] = Query(None),
     monat: Optional[int] = Query(None),
@@ -37,6 +38,8 @@ def list_audit(
         q = q.filter(AuditLog.mandant_id == mandant_id)
     if objekt_typ:
         q = q.filter(AuditLog.objekt_typ == objekt_typ)
+    if objekt_id:
+        q = q.filter(AuditLog.objekt_id == objekt_id)
     if aktionstyp:
         q = q.filter(AuditLog.aktionstyp == aktionstyp)
     if benutzer_id:

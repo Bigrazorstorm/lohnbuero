@@ -1,12 +1,12 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, Clock, AlertCircle } from 'lucide-react'
+import { ArrowLeft, Check, Clock, AlertCircle, History } from 'lucide-react'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import toast from 'react-hot-toast'
-import { workflowsApi } from '../api/client'
-import type { WorkflowInstanz, ChecklistItemStatus, WorkflowStatus } from '../types'
+import { workflowsApi, auditApi } from '../api/client'
+import type { WorkflowInstanz, ChecklistItemStatus, WorkflowStatus, AuditLog } from '../types'
 import Ampel from '../components/Ampel'
 import { WorkflowStatusBadge, ChecklistStatusBadge } from '../components/StatusBadge'
 import { useAuthStore } from '../store/auth'
@@ -30,6 +30,13 @@ export default function WorkflowDetail() {
   const { data: wf, isLoading } = useQuery<WorkflowInstanz>({
     queryKey: ['workflow', id],
     queryFn: () => workflowsApi.get(Number(id)).then((r) => (r as { data: WorkflowInstanz }).data),
+  })
+
+  // Audit log for this workflow
+  const { data: auditLogs } = useQuery<AuditLog[]>({
+    queryKey: ['workflow-audit', id],
+    queryFn: () => auditApi.list({ objekt_typ: 'workflow', objekt_id: Number(id) }),
+    enabled: !!id,
   })
 
   const itemMutation = useMutation({
@@ -61,8 +68,16 @@ export default function WorkflowDetail() {
     itemMutation.mutate({ itemId, status: newStatus })
   }
 
-  const markProcessStep = (key: string) => {
-    workflowMutation.mutate({ [key]: new Date().toISOString() })
+  // Toggle kernel process step (check/uncheck)
+  const toggleProcessStep = (key: string, currentValue: string | undefined) => {
+    if (isMandant) return
+    if (currentValue) {
+      // Remove the date (toggle off)
+      workflowMutation.mutate({ [key]: null })
+    } else {
+      // Set current date (toggle on)
+      workflowMutation.mutate({ [key]: new Date().toISOString() })
+    }
   }
 
   const completedCount = wf.items.filter(i => i.status === 'erledigt').length
@@ -127,9 +142,13 @@ export default function WorkflowDetail() {
                 const isDone = !!value
                 return (
                   <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border ${isDone ? 'border-green-100 bg-green-50' : 'border-amber-100 bg-amber-50'}`}>
-                    <div className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center ${isDone ? 'bg-green-500 border-green-500' : 'border-amber-300'}`}>
+                    <button
+                      disabled={isMandant || workflowMutation.isPending}
+                      onClick={() => toggleProcessStep(step.key, value)}
+                      className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${isDone ? 'bg-green-500 border-green-500' : 'border-amber-300 hover:border-green-400'} ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                    >
                       {isDone && <Check size={12} className="text-white" />}
-                    </div>
+                    </button>
                     <div className="flex-1">
                       <div className="flex items-center gap-2">
                         <span className={`text-sm font-semibold ${isDone ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{step.label}</span>
@@ -137,8 +156,8 @@ export default function WorkflowDetail() {
                       </div>
                       {isDone ? (
                         <p className="text-xs text-green-600 mt-1">✓ {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })}</p>
-                      ) : !isMandant && (
-                        <button className="text-xs text-blue-600 hover:underline mt-1" onClick={() => markProcessStep(step.key)}>Jetzt markieren →</button>
+                      ) : (
+                        <p className="text-xs text-amber-500 mt-1">Klicken zum Markieren</p>
                       )}
                     </div>
                   </div>
@@ -199,6 +218,50 @@ export default function WorkflowDetail() {
             <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-2">
               <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.round((completedProcessSteps / PROCESS_STEPS.length) * 100)}%` }} />
             </div>
+          </div>
+
+          {/* Audit Log */}
+          <div className="card">
+            <div className="flex items-center gap-2 mb-3">
+              <History size={16} className="text-gray-500" />
+              <h3 className="text-sm font-semibold text-gray-700">Änderungen</h3>
+            </div>
+            {auditLogs && auditLogs.length > 0 ? (
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {auditLogs.slice(0, 20).map((log) => {
+                  const newVal = typeof log.neuer_wert === 'string' ? JSON.parse(log.neuer_wert) : log.neuer_wert
+                  const oldVal = typeof log.alter_wert === 'string' ? JSON.parse(log.alter_wert) : log.alter_wert
+                  return (
+                    <div key={log.id} className="text-xs border-l-2 border-gray-200 pl-2 py-1">
+                      <div className="flex items-center gap-1 text-gray-500">
+                        <span>{format(new Date(log.zeitstempel), 'dd.MM. HH:mm', { locale: de })}</span>
+                      </div>
+                      <div className="text-gray-700 mt-0.5">
+                        {log.aktionstyp === 'statuswechsel' && <span>Status → {newVal?.status}</span>}
+                        {log.aktionstyp === 'kernprozess' && (
+                          <span>
+                            {newVal?.unterlagen_eingegangen_am ? 'Unterlagen eingegangen' :
+                             newVal?.probe_abrechnung_am ? 'Probeabrechnung erstellt' :
+                             newVal?.probe_geprueft_am ? 'Probe geprüft' :
+                             newVal?.mandant_freigabe_am ? 'Mandantenfreigabe' :
+                             newVal?.endabrechnung_am ? 'Endabrechnung' :
+                             newVal?.versand_am ? 'Versand' :
+                             newVal?.abgeschlossen_am ? 'Abgeschlossen' : 'Kernprozess'}
+                          </span>
+                        )}
+                        {log.aktionstyp === 'item_status' && <span>Checkliste: {newVal?.status}</span>}
+                        {log.aktionstyp === 'aktualisiert' && <span>Aktualisiert</span>}
+                      </div>
+                      <div className="text-gray-400 mt-0.5">
+                        {log.benutzer_id ? `von Benutzer #${log.benutzer_id}` : 'System'}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400">Noch keine Änderungen protokolliert</p>
+            )}
           </div>
 
           {!isMandant && (
