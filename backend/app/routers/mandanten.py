@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from app import audit_service
 from app.auth import get_current_user, require_admin_or_teamleitung, require_staff
 from app.database import get_db
-from app.models import Mandant, MandantKategorie, User, MandantAenderung
-from app.schemas import MandantCreate, MandantOut, MandantUpdate, MandantAenderungOut
+from app.models import Mandant, MandantKategorie, User, MandantAenderung, Fristenprofil, Fristenregel, Sonderaufgabe, MandantKontakt, MandantNotiz
+from app.schemas import MandantCreate, MandantOut, MandantUpdate, MandantAenderungOut, FristenprofilCreate, FristenprofilOut, FristenprofilUpdate, SonderaufgabeCreate, SonderaufgabeOut, SonderaufgabeUpdate, MandantKontaktCreate, MandantKontaktOut, MandantKontaktUpdate, MandantNotizCreate, MandantNotizOut
 
 router = APIRouter(prefix="/api/mandanten", tags=["mandanten"])
 
@@ -247,3 +247,378 @@ def cancel_mandant_aenderung(
     )
     db.commit()
     return {"message": "Änderung abgebrochen"}
+
+
+# ─────────────────────────────────────────
+# Fristenprofile
+# ─────────────────────────────────────────
+
+@router.get("/{mandant_id}/fristenprofil", response_model=FristenprofilOut)
+def get_fristenprofil(
+    mandant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
+    if not mandant:
+        raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
+
+    if not mandant.fristenprofil:
+        raise HTTPException(status_code=404, detail="Kein Fristenprofil vorhanden")
+
+    return mandant.fristenprofil
+
+
+@router.post("/{mandant_id}/fristenprofil", response_model=FristenprofilOut, status_code=status.HTTP_201_CREATED)
+def create_fristenprofil(
+    mandant_id: int,
+    data: FristenprofilCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teamleitung),
+):
+    mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
+    if not mandant:
+        raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
+
+    if mandant.fristenprofil:
+        raise HTTPException(status_code=400, detail="Fristenprofil bereits vorhanden")
+
+    profil = Fristenprofil(mandant_id=mandant_id, **data.model_dump(exclude={'regeln'}))
+    db.add(profil)
+    db.flush()
+
+    for regel_data in data.regeln:
+        regel = Fristenregel(profil_id=profil.id, **regel_data.model_dump())
+        db.add(regel)
+
+    audit_service.log(
+        db,
+        objekt_typ="fristenprofil",
+        objekt_id=profil.id,
+        mandant_id=mandant_id,
+        aktionstyp="erstellt",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        neuer_wert=data.model_dump(),
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Fristenprofil für Mandant '{mandant.name}' erstellt",
+    )
+    db.commit()
+    db.refresh(profil)
+    return profil
+
+
+@router.patch("/{mandant_id}/fristenprofil", response_model=FristenprofilOut)
+def update_fristenprofil(
+    mandant_id: int,
+    data: FristenprofilUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teamleitung),
+):
+    mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
+    if not mandant or not mandant.fristenprofil:
+        raise HTTPException(status_code=404, detail="Fristenprofil nicht gefunden")
+
+    profil = mandant.fristenprofil
+    update_data = data.model_dump(exclude_unset=True)
+    old_vals = {k: getattr(profil, k) for k in update_data}
+
+    for k, v in update_data.items():
+        if k == 'regeln':
+            # Handle regeln separately
+            continue
+        setattr(profil, k, v)
+
+    audit_service.log(
+        db,
+        objekt_typ="fristenprofil",
+        objekt_id=profil.id,
+        mandant_id=mandant_id,
+        aktionstyp="aktualisiert",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        alter_wert=old_vals,
+        neuer_wert=update_data,
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Fristenprofil für Mandant '{mandant.name}' aktualisiert",
+    )
+    db.commit()
+    db.refresh(profil)
+    return profil
+
+
+# ─────────────────────────────────────────
+# Sonderaufgaben
+# ─────────────────────────────────────────
+
+@router.get("/{mandant_id}/sonderaufgaben", response_model=List[SonderaufgabeOut])
+def list_sonderaufgaben(
+    mandant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    return db.query(Sonderaufgabe).filter(Sonderaufgabe.mandant_id == mandant_id).order_by(Sonderaufgabe.faellig_datum).all()
+
+
+@router.post("/{mandant_id}/sonderaufgaben", response_model=SonderaufgabeOut, status_code=status.HTTP_201_CREATED)
+def create_sonderaufgabe(
+    mandant_id: int,
+    data: SonderaufgabeCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teamleitung),
+):
+    mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
+    if not mandant:
+        raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
+
+    aufgabe = Sonderaufgabe(mandant_id=mandant_id, erstellt_von_id=current_user.id, **data.model_dump())
+    db.add(aufgabe)
+    db.flush()
+
+    audit_service.log(
+        db,
+        objekt_typ="sonderaufgabe",
+        objekt_id=aufgabe.id,
+        mandant_id=mandant_id,
+        aktionstyp="erstellt",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        neuer_wert=data.model_dump(),
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Sonderaufgabe '{aufgabe.titel}' erstellt",
+    )
+    db.commit()
+    db.refresh(aufgabe)
+    return aufgabe
+
+
+@router.patch("/{mandant_id}/sonderaufgaben/{aufgabe_id}", response_model=SonderaufgabeOut)
+def update_sonderaufgabe(
+    mandant_id: int,
+    aufgabe_id: int,
+    data: SonderaufgabeUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    aufgabe = db.query(Sonderaufgabe).filter(
+        Sonderaufgabe.id == aufgabe_id,
+        Sonderaufgabe.mandant_id == mandant_id
+    ).first()
+    if not aufgabe:
+        raise HTTPException(status_code=404, detail="Sonderaufgabe nicht gefunden")
+
+    update_data = data.model_dump(exclude_unset=True)
+    old_vals = {k: getattr(aufgabe, k) for k in update_data}
+
+    for k, v in update_data.items():
+        setattr(aufgabe, k, v)
+
+    audit_service.log(
+        db,
+        objekt_typ="sonderaufgabe",
+        objekt_id=aufgabe.id,
+        mandant_id=mandant_id,
+        aktionstyp="aktualisiert",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        alter_wert=old_vals,
+        neuer_wert=update_data,
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Sonderaufgabe '{aufgabe.titel}' aktualisiert",
+    )
+    db.commit()
+    db.refresh(aufgabe)
+    return aufgabe
+
+
+# ─────────────────────────────────────────
+# Mandant Kontakte
+# ─────────────────────────────────────────
+
+@router.get("/{mandant_id}/kontakte", response_model=List[MandantKontaktOut])
+def list_mandant_kontakte(
+    mandant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    return db.query(MandantKontakt).filter(MandantKontakt.mandant_id == mandant_id).order_by(MandantKontakt.name).all()
+
+
+@router.post("/{mandant_id}/kontakte", response_model=MandantKontaktOut, status_code=status.HTTP_201_CREATED)
+def create_mandant_kontakt(
+    mandant_id: int,
+    data: MandantKontaktCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teamleitung),
+):
+    mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
+    if not mandant:
+        raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
+
+    kontakt = MandantKontakt(mandant_id=mandant_id, **data.model_dump())
+    db.add(kontakt)
+    db.flush()
+
+    audit_service.log(
+        db,
+        objekt_typ="mandant_kontakt",
+        objekt_id=kontakt.id,
+        mandant_id=mandant_id,
+        aktionstyp="erstellt",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        neuer_wert=data.model_dump(),
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Kontakt '{kontakt.name}' für Mandant '{mandant.name}' erstellt",
+    )
+    db.commit()
+    db.refresh(kontakt)
+    return kontakt
+
+
+@router.patch("/{mandant_id}/kontakte/{kontakt_id}", response_model=MandantKontaktOut)
+def update_mandant_kontakt(
+    mandant_id: int,
+    kontakt_id: int,
+    data: MandantKontaktUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teamleitung),
+):
+    kontakt = db.query(MandantKontakt).filter(
+        MandantKontakt.id == kontakt_id,
+        MandantKontakt.mandant_id == mandant_id
+    ).first()
+    if not kontakt:
+        raise HTTPException(status_code=404, detail="Kontakt nicht gefunden")
+
+    update_data = data.model_dump(exclude_unset=True)
+    old_vals = {k: getattr(kontakt, k) for k in update_data}
+
+    for k, v in update_data.items():
+        setattr(kontakt, k, v)
+
+    audit_service.log(
+        db,
+        objekt_typ="mandant_kontakt",
+        objekt_id=kontakt.id,
+        mandant_id=mandant_id,
+        aktionstyp="aktualisiert",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        alter_wert=old_vals,
+        neuer_wert=update_data,
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Kontakt '{kontakt.name}' aktualisiert",
+    )
+    db.commit()
+    db.refresh(kontakt)
+    return kontakt
+
+
+# ─────────────────────────────────────────
+# Mandant Notizen
+# ─────────────────────────────────────────
+
+@router.get("/{mandant_id}/notizen", response_model=List[MandantNotizOut])
+def list_mandant_notizen(
+    mandant_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    return db.query(MandantNotiz).filter(MandantNotiz.mandant_id == mandant_id).order_by(MandantNotiz.version).all()
+
+
+@router.post("/{mandant_id}/notizen", response_model=MandantNotizOut, status_code=status.HTTP_201_CREATED)
+def create_mandant_notiz(
+    mandant_id: int,
+    data: MandantNotizCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teamleitung),
+):
+    mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
+    if not mandant:
+        raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
+
+    # Get next version
+    max_version = db.query(MandantNotiz).filter(MandantNotiz.mandant_id == mandant_id).order_by(MandantNotiz.version.desc()).first()
+    version = (max_version.version + 1) if max_version else 1
+
+    notiz = MandantNotiz(mandant_id=mandant_id, version=version, erstellt_von_id=current_user.id, **data.model_dump())
+    db.add(notiz)
+    db.flush()
+
+    audit_service.log(
+        db,
+        objekt_typ="mandant_notiz",
+        objekt_id=notiz.id,
+        mandant_id=mandant_id,
+        aktionstyp="erstellt",
+        benutzer_id=current_user.id,
+        benutzerrolle=current_user.role.value,
+        neuer_wert=data.model_dump(),
+        ip_adresse=request.client.host if request.client else None,
+        beschreibung=f"Notiz Version {version} für Mandant '{mandant.name}' erstellt",
+    )
+    db.commit()
+    db.refresh(notiz)
+    return notiz
+
+
+# ─────────────────────────────────────────
+# Geplante Änderungen Aktivierung
+# ─────────────────────────────────────────
+
+@router.post("/activate-planned-changes")
+def activate_planned_changes(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teamleitung),
+):
+    from datetime import datetime
+    import json
+
+    # Find all planned changes that are due
+    due_changes = db.query(MandantAenderung).filter(
+        MandantAenderung.status == "geplant",
+        MandantAenderung.aenderung_zum <= datetime.utcnow()
+    ).all()
+
+    activated = []
+    for change in due_changes:
+        mandant = db.query(Mandant).filter(Mandant.id == change.mandant_id).first()
+        if not mandant:
+            continue
+
+        old_vals = {}
+        aenderungen = json.loads(change.aenderungen)
+        for k, v in aenderungen.items():
+            old_vals[k] = getattr(mandant, k)
+            setattr(mandant, k, v)
+
+        change.status = "aktiviert"
+        change.aktiviert_am = datetime.utcnow()
+
+        audit_service.log(
+            db,
+            objekt_typ="mandant",
+            objekt_id=mandant.id,
+            mandant_id=mandant.id,
+            aktionstyp="geplante_aenderung_aktiviert",
+            benutzer_id=current_user.id,
+            benutzerrolle=current_user.role.value,
+            alter_wert=old_vals,
+            neuer_wert=aenderungen,
+            ip_adresse=request.client.host if request.client else None,
+            beschreibung=f"Geplante Änderung für Mandant '{mandant.name}' aktiviert",
+        )
+        activated.append(mandant.id)
+
+    db.commit()
+    return {"activated_mandanten": activated}

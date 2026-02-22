@@ -5,7 +5,8 @@ from pydantic import BaseModel, EmailStr
 from app.models import (
     UserRole, MandantKategorie, Abgabeweg, WorkflowStatus,
     Ampelstatus, ChecklistItemStatus, TicketStatus, TicketPrioritaet,
-    EskalationStufe, EmailLogStatus,
+    EskalationStufe, EmailLogStatus, FristenRegeltyp, SonderaufgabeStatus,
+    MandantKontaktRolle,
 )
 
 # ─────────────────────────────────────────
@@ -222,6 +223,9 @@ class UserBase(BaseModel):
     full_name: str
     role: UserRole = UserRole.SACHBEARBEITER
     is_active: bool = True
+    workload_limit: float = 100.0
+    current_workload: float = 0.0
+    total_points_earned: float = 0.0
 
 
 class UserCreate(UserBase):
@@ -233,6 +237,9 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+    workload_limit: Optional[float] = None
+    current_workload: Optional[float] = None
+    total_points_earned: Optional[float] = None
     password: Optional[str] = None
 
 
@@ -298,6 +305,7 @@ class MandantUpdate(BaseModel):
     stundensatz: Optional[float] = None
     monatspauschale: Optional[float] = None
     ist_aktiv: Optional[bool] = None
+    fristenprofil_id: Optional[int] = None
     aenderung_zum: Optional[datetime] = None
 
 
@@ -307,7 +315,10 @@ class MandantOut(MandantBase):
     sachbearbeiter: Optional[UserShort] = None
     vertretung: Optional[UserShort] = None
     branchen_liste: List[BrancheOut] = []
-    aenderungen: List[MandantAenderungOut] = []
+    aenderungen: List["MandantAenderungOut"] = []
+    fristenprofil: Optional["FristenprofilOut"] = None
+    kontakte: List["MandantKontaktOut"] = []
+    notizen: List["MandantNotizOut"] = []
     created_at: datetime
 
     model_config = {"from_attributes": True}
@@ -347,8 +358,148 @@ class MandantAenderungOut(MandantAenderungBase):
     model_config = {"from_attributes": True}
 
 
+# ─────────────────────────────────────────# Fristenprofil
 # ─────────────────────────────────────────
-# Workflow Vorlage
+
+class FristenregelBase(BaseModel):
+    fristart: str
+    regeltyp: FristenRegeltyp
+    regel_config: str  # JSON
+    bundesland: Optional[str] = None
+    interne_vorfrist_tage: int = 0
+    ist_aktiv: bool = True
+
+class FristenregelCreate(FristenregelBase):
+    pass
+
+class FristenregelUpdate(BaseModel):
+    fristart: Optional[str] = None
+    regeltyp: Optional[FristenRegeltyp] = None
+    regel_config: Optional[str] = None
+    bundesland: Optional[str] = None
+    interne_vorfrist_tage: Optional[int] = None
+    ist_aktiv: Optional[bool] = None
+
+class FristenregelOut(FristenregelBase):
+    id: int
+    profil_id: int
+    position: int
+
+    model_config = {"from_attributes": True}
+
+
+class FristenprofilBase(BaseModel):
+    name: str
+    ist_aktiv: bool = True
+
+class FristenprofilCreate(FristenprofilBase):
+    regeln: List[FristenregelCreate] = []
+
+class FristenprofilUpdate(BaseModel):
+    name: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+    regeln: Optional[List[FristenregelUpdate]] = None
+
+class FristenprofilOut(FristenprofilBase):
+    id: int
+    mandant_id: int
+    regeln: List[FristenregelOut] = []
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Sonderaufgabe
+# ─────────────────────────────────────────
+
+class SonderaufgabeBase(BaseModel):
+    mandant_id: Optional[int] = None
+    monat: Optional[int] = None
+    jahr: Optional[int] = None
+    kategorie: str
+    titel: str
+    beschreibung: Optional[str] = None
+    faellig_datum: Optional[datetime] = None
+    verantwortlicher_id: Optional[int] = None
+    punkte: float = 0.0
+
+class SonderaufgabeCreate(SonderaufgabeBase):
+    pass
+
+class SonderaufgabeUpdate(BaseModel):
+    mandant_id: Optional[int] = None
+    monat: Optional[int] = None
+    jahr: Optional[int] = None
+    kategorie: Optional[str] = None
+    titel: Optional[str] = None
+    beschreibung: Optional[str] = None
+    faellig_datum: Optional[datetime] = None
+    status: Optional[SonderaufgabeStatus] = None
+    verantwortlicher_id: Optional[int] = None
+    punkte: Optional[float] = None
+
+class SonderaufgabeOut(SonderaufgabeBase):
+    id: int
+    status: SonderaufgabeStatus
+    erstellt_von: UserShort
+    verantwortlicher: Optional[UserShort] = None
+    created_at: datetime
+    abgeschlossen_am: Optional[datetime] = None
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# MandantKontakt
+# ─────────────────────────────────────────
+
+class MandantKontaktBase(BaseModel):
+    rolle: MandantKontaktRolle
+    name: str
+    email: Optional[str] = None
+    telefon: Optional[str] = None
+    ist_aktiv: bool = True
+
+class MandantKontaktCreate(MandantKontaktBase):
+    pass
+
+class MandantKontaktUpdate(BaseModel):
+    rolle: Optional[MandantKontaktRolle] = None
+    name: Optional[str] = None
+    email: Optional[str] = None
+    telefon: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+
+class MandantKontaktOut(MandantKontaktBase):
+    id: int
+    mandant_id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# MandantNotiz
+# ─────────────────────────────────────────
+
+class MandantNotizBase(BaseModel):
+    inhalt: str
+
+class MandantNotizCreate(MandantNotizBase):
+    pass
+
+class MandantNotizOut(MandantNotizBase):
+    id: int
+    mandant_id: int
+    version: int
+    erstellt_von: UserShort
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────# Workflow Vorlage
 # ─────────────────────────────────────────
 
 class WorkflowVorlageItemBase(BaseModel):
@@ -451,6 +602,7 @@ class WorkflowItemOut(BaseModel):
     erledigt_am: Optional[datetime] = None
     erledigt_von: Optional[UserShort] = None
     notiz: Optional[str] = None
+    punkte: float = 0.0
 
     model_config = {"from_attributes": True}
 
@@ -474,6 +626,7 @@ class WorkflowInstanzOut(BaseModel):
     versand_am: Optional[datetime] = None
     abgeschlossen_am: Optional[datetime] = None
     notizen: Optional[str] = None
+    punkte: float = 0.0
     created_at: datetime
     items: List[WorkflowItemOut] = []
 

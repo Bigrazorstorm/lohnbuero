@@ -99,6 +99,27 @@ class EmailLogStatus(str, enum.Enum):
     GEBOUNCED = "gebounced"
 
 
+class FristenRegeltyp(str, enum.Enum):
+    FIXES_DATUM = "fixes_datum"
+    RELATIV_MONATSENDE = "relativ_monatsende"
+    RELATIV_BANKARBEITSTAGE = "relativ_bankarbeitstage"
+    RELATIV_ANDERE_FRIST = "relativ_andere_frist"
+    EREIGNISBASIERT = "ereignisbasiert"
+
+
+class SonderaufgabeStatus(str, enum.Enum):
+    OFFEN = "offen"
+    IN_BEARBEITUNG = "in_bearbeitung"
+    ABGESCHLOSSEN = "abgeschlossen"
+    ABGEBROCHEN = "abgebrochen"
+
+
+class MandantKontaktRolle(str, enum.Enum):
+    ANSPRECHPARTNER = "ansprechpartner"
+    TICKET_KOMMUNIKATION = "ticket_kommunikation"
+    UPLOAD_REMINDER = "upload_reminder"
+
+
 # ─────────────────────────────────────────
 # User
 # ─────────────────────────────────────────
@@ -112,6 +133,9 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.SACHBEARBEITER)
     is_active = Column(Boolean, default=True)
+    workload_limit = Column(Float, default=100.0)  # max points per month
+    current_workload = Column(Float, default=0.0)  # current assigned points
+    total_points_earned = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -158,6 +182,7 @@ class Mandant(Base):
     sachbearbeiter_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     vertretung_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     portal_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    fristenprofil_id = Column(Integer, ForeignKey("fristenprofile.id"), nullable=True)
 
     # Aufwand / Kalkulation
     stundensatz = Column(Float)
@@ -178,6 +203,9 @@ class Mandant(Base):
     email_logs = relationship("EmailLog", back_populates="mandant")
     branchen_liste = relationship("Branche", secondary=mandant_branchen, back_populates="mandanten")
     aenderungen = relationship("MandantAenderung", back_populates="mandant", order_by="MandantAenderung.erstellt_am")
+    fristenprofil = relationship("Fristenprofil", back_populates="mandant")
+    kontakte = relationship("MandantKontakt", back_populates="mandant")
+    notizen = relationship("MandantNotiz", back_populates="mandant", order_by="MandantNotiz.version")
 
 
 # ─────────────────────────────────────────
@@ -201,6 +229,105 @@ class MandantAenderung(Base):
     mandant = relationship("Mandant", backref="aenderungen")
     erstellt_von = relationship("User", foreign_keys=[erstellt_von_id])
     abgebrochen_von = relationship("User", foreign_keys=[abgebrochen_von_id])
+
+
+# ─────────────────────────────────────────
+# Fristenprofil (client-specific deadline rules)
+# ─────────────────────────────────────────
+
+class Fristenprofil(Base):
+    __tablename__ = "fristenprofile"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
+    name = Column(String, nullable=False)  # e.g. "Standard Fristenprofil"
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    mandant = relationship("Mandant", back_populates="fristenprofil")
+    regeln = relationship("Fristenregel", back_populates="profil", order_by="Fristenregel.position")
+
+
+class Fristenregel(Base):
+    __tablename__ = "fristenregeln"
+
+    id = Column(Integer, primary_key=True, index=True)
+    profil_id = Column(Integer, ForeignKey("fristenprofile.id"), nullable=False)
+    position = Column(Integer, nullable=False)
+    fristart = Column(String, nullable=False)  # e.g. "SV-Zahlung", "Lohnsteuer"
+    regeltyp = Column(Enum(FristenRegeltyp), nullable=False)
+    regel_config = Column(Text, nullable=False)  # JSON config for the rule
+    bundesland = Column(String, nullable=True)  # for holidays
+    interne_vorfrist_tage = Column(Integer, default=0)
+    ist_aktiv = Column(Boolean, default=True)
+
+    profil = relationship("Fristenprofil", back_populates="regeln")
+
+
+# ─────────────────────────────────────────
+# Sonderaufgabe (special tasks)
+# ─────────────────────────────────────────
+
+class Sonderaufgabe(Base):
+    __tablename__ = "sonderaufgaben"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=True)
+    monat = Column(Integer, nullable=True)
+    jahr = Column(Integer, nullable=True)
+    kategorie = Column(String, nullable=False)
+    titel = Column(String, nullable=False)
+    beschreibung = Column(Text)
+    faellig_datum = Column(DateTime, nullable=True)
+    status = Column(Enum(SonderaufgabeStatus), default=SonderaufgabeStatus.OFFEN)
+    verantwortlicher_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    punkte = Column(Float, default=0.0)
+    erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    abgeschlossen_am = Column(DateTime, nullable=True)
+
+    # Relationships
+    mandant = relationship("Mandant", backref="sonderaufgaben")
+    verantwortlicher = relationship("User", foreign_keys=[verantwortlicher_id])
+    erstellt_von = relationship("User", foreign_keys=[erstellt_von_id])
+
+
+# ─────────────────────────────────────────
+# MandantKontakt (multiple contacts)
+# ─────────────────────────────────────────
+
+class MandantKontakt(Base):
+    __tablename__ = "mandant_kontakte"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
+    rolle = Column(Enum(MandantKontaktRolle), nullable=False)
+    name = Column(String, nullable=False)
+    email = Column(String, nullable=True)
+    telefon = Column(String, nullable=True)
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mandant = relationship("Mandant", back_populates="kontakte")
+
+
+# ─────────────────────────────────────────
+# MandantNotiz (versioned notes)
+# ─────────────────────────────────────────
+
+class MandantNotiz(Base):
+    __tablename__ = "mandant_notizen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
+    version = Column(Integer, nullable=False)
+    inhalt = Column(Text, nullable=False)
+    erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mandant = relationship("Mandant", back_populates="notizen")
+    erstellt_von = relationship("User", foreign_keys=[erstellt_von_id])
 
 
 # ─────────────────────────────────────────
@@ -270,6 +397,7 @@ class WorkflowInstanz(Base):
     wiedereroeffnet_begruendung = Column(Text, nullable=True)
 
     notizen = Column(Text)
+    punkte = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -302,6 +430,7 @@ class WorkflowItem(Base):
     erledigt_am = Column(DateTime, nullable=True)
     erledigt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     notiz = Column(Text)
+    punkte = Column(Float, default=0.0)
 
     instanz = relationship("WorkflowInstanz", back_populates="items")
     erledigt_von = relationship("User", back_populates="workflow_items_erledigt")
