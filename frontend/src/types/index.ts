@@ -155,12 +155,26 @@ export interface WorkflowInstanz {
   sachbearbeiter?: UserShort
   pruefer?: UserShort
   unterlagen_eingegangen_am?: string
+  unterlagen_eingegangen_von?: UserShort
+  unterlagen_faellig?: string
   probe_abrechnung_am?: string
+  probe_abrechnung_von?: UserShort
+  probe_abrechnung_faellig?: string
   probe_geprueft_am?: string
+  probe_geprueft_von?: UserShort
+  probe_geprueft_faellig?: string
   mandant_freigabe_am?: string
+  mandant_freigabe_von?: UserShort
+  mandant_freigabe_faellig?: string
   endabrechnung_am?: string
+  endabrechnung_von?: UserShort
+  endabrechnung_faellig?: string
   versand_am?: string
+  versand_von?: UserShort
+  versand_faellig?: string
   abgeschlossen_am?: string
+  abgeschlossen_von?: UserShort
+  abgeschlossen_faellig?: string
   wiedereroeffnet_am?: string
   wiedereroeffnet_begruendung?: string
   notizen?: string
@@ -348,6 +362,7 @@ export interface AuditLog {
   alter_wert?: string
   neuer_wert?: string
   benutzer_id?: number
+  benutzer?: UserShort
   benutzerrolle?: string
   zeitstempel: string
   ip_adresse?: string

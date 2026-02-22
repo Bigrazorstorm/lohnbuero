@@ -12,13 +12,13 @@ import { WorkflowStatusBadge, ChecklistStatusBadge } from '../components/StatusB
 import { useAuthStore } from '../store/auth'
 
 const PROCESS_STEPS = [
-  { key: 'unterlagen_eingegangen_am', label: 'Unterlagen eingegangen' },
-  { key: 'probe_abrechnung_am', label: 'Probeabrechnung erstellt' },
-  { key: 'probe_geprueft_am', label: 'Probeabrechnung geprüft (4-Augen)' },
-  { key: 'mandant_freigabe_am', label: 'Mandantenfreigabe erteilt' },
-  { key: 'endabrechnung_am', label: 'Endabrechnung durchgeführt' },
-  { key: 'versand_am', label: 'Lohnzettel versandt' },
-  { key: 'abgeschlossen_am', label: 'Monatsabschluss dokumentiert' },
+  { key: 'unterlagen_eingegangen_am', vonKey: 'unterlagen_eingegangen_von', faelligKey: 'unterlagen_faellig', label: 'Unterlagen eingegangen' },
+  { key: 'probe_abrechnung_am', vonKey: 'probe_abrechnung_von', faelligKey: 'probe_abrechnung_faellig', label: 'Probeabrechnung erstellt' },
+  { key: 'probe_geprueft_am', vonKey: 'probe_geprueft_von', faelligKey: 'probe_geprueft_faellig', label: 'Probeabrechnung geprüft (4-Augen)' },
+  { key: 'mandant_freigabe_am', vonKey: 'mandant_freigabe_von', faelligKey: 'mandant_freigabe_faellig', label: 'Mandantenfreigabe erteilt' },
+  { key: 'endabrechnung_am', vonKey: 'endabrechnung_von', faelligKey: 'endabrechnung_faellig', label: 'Endabrechnung durchgeführt' },
+  { key: 'versand_am', vonKey: 'versand_von', faelligKey: 'versand_faellig', label: 'Lohnzettel versandt' },
+  { key: 'abgeschlossen_am', vonKey: 'abgeschlossen_von', faelligKey: 'abgeschlossen_faellig', label: 'Monatsabschluss dokumentiert' },
 ] as const
 
 export default function WorkflowDetail() {
@@ -37,12 +37,16 @@ export default function WorkflowDetail() {
     queryKey: ['workflow-audit', id],
     queryFn: () => auditApi.list({ objekt_typ: 'workflow', objekt_id: Number(id) }).then((r) => r.data),
     enabled: !!id,
+    refetchInterval: 5000,
   })
 
   const itemMutation = useMutation({
     mutationFn: ({ itemId, status, notiz }: { itemId: number; status?: ChecklistItemStatus; notiz?: string }) =>
       workflowsApi.updateItem(Number(id), itemId, { status, notiz }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['workflow', id] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workflow', id] })
+      qc.invalidateQueries({ queryKey: ['workflow-audit', id] })
+    },
     onError: () => toast.error('Fehler beim Aktualisieren'),
   })
 
@@ -51,6 +55,7 @@ export default function WorkflowDetail() {
       workflowsApi.update(Number(id), data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workflow', id] })
+      qc.invalidateQueries({ queryKey: ['workflow-audit', id] })
       toast.success('Gespeichert')
     },
     onError: () => toast.error('Fehler'),
@@ -139,9 +144,12 @@ export default function WorkflowDetail() {
             <div className="space-y-2">
               {PROCESS_STEPS.map((step, idx) => {
                 const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
+                const erledigtVon = wf[step.vonKey as keyof WorkflowInstanz] as { full_name: string } | undefined
+                const faellig = wf[step.faelligKey as keyof WorkflowInstanz] as string | undefined
                 const isDone = !!value
+                const isOverdue = faellig && !isDone && new Date(faellig) < new Date()
                 return (
-                  <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border ${isDone ? 'border-green-100 bg-green-50' : 'border-amber-100 bg-amber-50'}`}>
+                  <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border ${isDone ? 'border-green-100 bg-green-50' : isOverdue ? 'border-red-100 bg-red-50' : 'border-amber-100 bg-amber-50'}`}>
                     <button
                       disabled={isMandant || workflowMutation.isPending}
                       onClick={() => toggleProcessStep(step.key, value)}
@@ -154,11 +162,13 @@ export default function WorkflowDetail() {
                         <span className={`text-sm font-semibold ${isDone ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{step.label}</span>
                         <span className="badge bg-amber-100 text-amber-700 text-xs">Kernprozess</span>
                       </div>
-                      {isDone ? (
-                        <p className="text-xs text-green-600 mt-1">✓ {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })}</p>
-                      ) : (
-                        <p className="text-xs text-amber-500 mt-1">Klicken zum Markieren</p>
-                      )}
+                      <div className="flex items-center gap-3 mt-1">
+                        {isDone ? (
+                          <p className="text-xs text-green-600">✓ {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })} {erledigtVon && `· ${erledigtVon.full_name}`}</p>
+                        ) : faellig ? (
+                          <p className={`text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>Fällig: {format(new Date(faellig), 'dd.MM.yyyy', { locale: de })}</p>
+                        ) : null}
+                      </div>
                     </div>
                   </div>
                 )
@@ -227,34 +237,31 @@ export default function WorkflowDetail() {
               <h3 className="text-sm font-semibold text-gray-700">Änderungen</h3>
             </div>
             {auditLogs && auditLogs.length > 0 ? (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
+              <div className="space-y-1 max-h-64 overflow-y-auto">
                 {auditLogs.slice(0, 20).map((log) => {
                   const newVal = typeof log.neuer_wert === 'string' ? JSON.parse(log.neuer_wert) : log.neuer_wert
                   const oldVal = typeof log.alter_wert === 'string' ? JSON.parse(log.alter_wert) : log.alter_wert
-                  return (
-                    <div key={log.id} className="text-xs border-l-2 border-gray-200 pl-2 py-1">
-                      <div className="flex items-center gap-1 text-gray-500">
-                        <span>{format(new Date(log.zeitstempel), 'dd.MM. HH:mm', { locale: de })}</span>
-                      </div>
-                      <div className="text-gray-700 mt-0.5">
-                        {log.aktionstyp === 'statuswechsel' && <span>Status → {newVal?.status}</span>}
-                        {log.aktionstyp === 'kernprozess' && (
-                          <span>
-                            {newVal?.unterlagen_eingegangen_am ? 'Unterlagen eingegangen' :
+                  const benutzerName = log.benutzer?.full_name || log.benutzer_id ? `Benutzer #${log.benutzer_id}` : 'System'
+                  let aktionText = ''
+                  if (log.aktionstyp === 'statuswechsel') aktionText = `Status → ${newVal?.status}`
+                  else if (log.aktionstyp === 'kernprozess') {
+                    aktionText = newVal?.unterlagen_eingegangen_am ? 'Unterlagen eingegangen' :
                              newVal?.probe_abrechnung_am ? 'Probeabrechnung erstellt' :
                              newVal?.probe_geprueft_am ? 'Probe geprüft' :
                              newVal?.mandant_freigabe_am ? 'Mandantenfreigabe' :
                              newVal?.endabrechnung_am ? 'Endabrechnung' :
                              newVal?.versand_am ? 'Versand' :
-                             newVal?.abgeschlossen_am ? 'Abgeschlossen' : 'Kernprozess'}
-                          </span>
-                        )}
-                        {log.aktionstyp === 'item_status' && <span>Checkliste: {newVal?.status}</span>}
-                        {log.aktionstyp === 'aktualisiert' && <span>Aktualisiert</span>}
-                      </div>
-                      <div className="text-gray-400 mt-0.5">
-                        {log.benutzer_id ? `von Benutzer #${log.benutzer_id}` : 'System'}
-                      </div>
+                             newVal?.abgeschlossen_am ? 'Abgeschlossen' : 'Kernprozess'
+                  }
+                  else if (log.aktionstyp === 'item_status') aktionText = `Checkliste: ${newVal?.status}`
+                  else if (log.aktionstyp === 'aktualisiert') aktionText = 'Aktualisiert'
+                  return (
+                    <div key={log.id} className="text-xs text-gray-600">
+                      <span className="text-gray-400">{format(new Date(log.zeitstempel), 'dd.MM. HH:mm')}</span>
+                      {' · '}
+                      <span>{aktionText}</span>
+                      {' · '}
+                      <span>{benutzerName}</span>
                     </div>
                   )
                 })}

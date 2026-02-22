@@ -236,15 +236,31 @@ def update_workflow(
     old_status = instanz.status
     new_status = update_data.get("status")
 
-    # Kernel process step keys
+    # Kernel process step keys and their corresponding "von" fields
     KERNEL_PROCESS_KEYS = {
-        'unterlagen_eingegangen_am', 'probe_abrechnung_am', 'probe_geprueft_am',
-        'mandant_freigabe_am', 'endabrechnung_am', 'versand_am', 'abgeschlossen_am'
+        'unterlagen_eingegangen_am': 'unterlagen_eingegangen_von_id',
+        'probe_abrechnung_am': 'probe_abrechnung_von_id',
+        'probe_geprueft_am': 'probe_geprueft_von_id',
+        'mandant_freigabe_am': 'mandant_freigabe_von_id',
+        'endabrechnung_am': 'endabrechnung_von_id',
+        'versand_am': 'versand_von_id',
+        'abgeschlossen_am': 'abgeschlossen_von_id'
     }
 
     # Detect if this is a kernel process step update
     kernel_updates = {k: v for k, v in update_data.items() if k in KERNEL_PROCESS_KEYS}
     is_kernel_update = bool(kernel_updates)
+
+    # Set erledigt_von when completing a kernel process step
+    if is_kernel_update:
+        for key, value in kernel_updates.items():
+            von_field = KERNEL_PROCESS_KEYS[key]
+            if value is not None:
+                # Setting the step - also set who did it
+                update_data[von_field] = current_user.id
+            else:
+                # Clearing the step - also clear who did it
+                update_data[von_field] = None
 
     # ── Month-end closing validation ─────────────────────────
     if new_status == WorkflowStatus.ABGESCHLOSSEN and old_status != WorkflowStatus.ABGESCHLOSSEN:

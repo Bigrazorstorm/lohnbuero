@@ -578,12 +578,19 @@ class WorkflowInstanzUpdate(BaseModel):
     sachbearbeiter_id: Optional[int] = None
     pruefer_id: Optional[int] = None
     unterlagen_eingegangen_am: Optional[datetime] = None
+    unterlagen_eingegangen_von_id: Optional[int] = None
     probe_abrechnung_am: Optional[datetime] = None
+    probe_abrechnung_von_id: Optional[int] = None
     probe_geprueft_am: Optional[datetime] = None
+    probe_geprueft_von_id: Optional[int] = None
     mandant_freigabe_am: Optional[datetime] = None
+    mandant_freigabe_von_id: Optional[int] = None
     endabrechnung_am: Optional[datetime] = None
+    endabrechnung_von_id: Optional[int] = None
     versand_am: Optional[datetime] = None
+    versand_von_id: Optional[int] = None
     abgeschlossen_am: Optional[datetime] = None
+    abgeschlossen_von_id: Optional[int] = None
     wiedereroeffnet_begruendung: Optional[str] = None
     notizen: Optional[str] = None
 
@@ -630,12 +637,26 @@ class WorkflowInstanzOut(BaseModel):
     sachbearbeiter: Optional[UserShort] = None
     pruefer: Optional[UserShort] = None
     unterlagen_eingegangen_am: Optional[datetime] = None
+    unterlagen_eingegangen_von: Optional[UserShort] = None
+    unterlagen_faellig: Optional[datetime] = None
     probe_abrechnung_am: Optional[datetime] = None
+    probe_abrechnung_von: Optional[UserShort] = None
+    probe_abrechnung_faellig: Optional[datetime] = None
     probe_geprueft_am: Optional[datetime] = None
+    probe_geprueft_von: Optional[UserShort] = None
+    probe_geprueft_faellig: Optional[datetime] = None
     mandant_freigabe_am: Optional[datetime] = None
+    mandant_freigabe_von: Optional[UserShort] = None
+    mandant_freigabe_faellig: Optional[datetime] = None
     endabrechnung_am: Optional[datetime] = None
+    endabrechnung_von: Optional[UserShort] = None
+    endabrechnung_faellig: Optional[datetime] = None
     versand_am: Optional[datetime] = None
+    versand_von: Optional[UserShort] = None
+    versand_faellig: Optional[datetime] = None
     abgeschlossen_am: Optional[datetime] = None
+    abgeschlossen_von: Optional[UserShort] = None
+    abgeschlossen_faellig: Optional[datetime] = None
     notizen: Optional[str] = None
     punkte: float = 0.0
     created_at: datetime
@@ -780,6 +801,7 @@ class AuditLogOut(BaseModel):
     alter_wert: Optional[str] = None
     neuer_wert: Optional[str] = None
     benutzer_id: Optional[int] = None
+    benutzer: Optional[UserShort] = None
     benutzerrolle: Optional[str] = None
     zeitstempel: datetime
     ip_adresse: Optional[str] = None

@@ -140,4 +140,41 @@ def run_migrations():
         if "standard_punkte" not in vli_cols:
             conn.execute(text("ALTER TABLE workflow_vorlage_items ADD COLUMN standard_punkte REAL DEFAULT 1.0"))
 
+        # workflow_instanzen – erledigt_von and faellig fields for kernel processes
+        wi_cols = {col['name'] for col in inspector.get_columns('workflow_instanzen')}
+        if "unterlagen_eingegangen_von_id" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN unterlagen_eingegangen_von_id INTEGER"))
+        if "unterlagen_faellig" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN unterlagen_faellig DATETIME"))
+        if "probe_abrechnung_von_id" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN probe_abrechnung_von_id INTEGER"))
+        if "probe_abrechnung_faellig" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN probe_abrechnung_faellig DATETIME"))
+        if "probe_geprueft_von_id" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN probe_geprueft_von_id INTEGER"))
+        if "probe_geprueft_faellig" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN probe_geprueft_faellig DATETIME"))
+        if "mandant_freigabe_von_id" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN mandant_freigabe_von_id INTEGER"))
+        if "mandant_freigabe_faellig" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN mandant_freigabe_faellig DATETIME"))
+        if "endabrechnung_von_id" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN endabrechnung_von_id INTEGER"))
+        if "endabrechnung_faellig" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN endabrechnung_faellig DATETIME"))
+        if "versand_von_id" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN versand_von_id INTEGER"))
+        if "versand_faellig" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN versand_faellig DATETIME"))
+        if "abgeschlossen_von_id" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN abgeschlossen_von_id INTEGER"))
+        if "abgeschlossen_faellig" not in wi_cols:
+            conn.execute(text("ALTER TABLE workflow_instanzen ADD COLUMN abgeschlossen_faellig DATETIME"))
+
+        # audit_logs – add foreign key for benutzer_id
+        audit_cols = {col['name'] for col in inspector.get_columns('audit_logs')}
+        # Note: Foreign key constraint may already exist, but we ensure the column is there
+        if "benutzer_id" not in audit_cols:
+            conn.execute(text("ALTER TABLE audit_logs ADD COLUMN benutzer_id INTEGER"))
+
         conn.commit()

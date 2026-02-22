@@ -160,6 +160,7 @@ class User(Base):
     )
     eskalationen = relationship("EskalationLog", back_populates="eskaliert_an", foreign_keys="EskalationLog.eskaliert_an_id")
     dokumente = relationship("Dokument", back_populates="hochgeladen_von")
+    audit_logs = relationship("AuditLog", back_populates="benutzer")
 
 
 # ─────────────────────────────────────────
@@ -400,12 +401,26 @@ class WorkflowInstanz(Base):
 
     # Timestamps for key process steps
     unterlagen_eingegangen_am = Column(DateTime, nullable=True)
+    unterlagen_eingegangen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    unterlagen_faellig = Column(DateTime, nullable=True)
     probe_abrechnung_am = Column(DateTime, nullable=True)
+    probe_abrechnung_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    probe_abrechnung_faellig = Column(DateTime, nullable=True)
     probe_geprueft_am = Column(DateTime, nullable=True)
+    probe_geprueft_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    probe_geprueft_faellig = Column(DateTime, nullable=True)
     mandant_freigabe_am = Column(DateTime, nullable=True)
+    mandant_freigabe_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    mandant_freigabe_faellig = Column(DateTime, nullable=True)
     endabrechnung_am = Column(DateTime, nullable=True)
+    endabrechnung_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    endabrechnung_faellig = Column(DateTime, nullable=True)
     versand_am = Column(DateTime, nullable=True)
+    versand_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    versand_faellig = Column(DateTime, nullable=True)
     abgeschlossen_am = Column(DateTime, nullable=True)
+    abgeschlossen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    abgeschlossen_faellig = Column(DateTime, nullable=True)
     wiedereroeffnet_am = Column(DateTime, nullable=True)
     wiedereroeffnet_begruendung = Column(Text, nullable=True)
 
@@ -418,6 +433,13 @@ class WorkflowInstanz(Base):
     vorlage = relationship("WorkflowVorlage", back_populates="instanzen")
     sachbearbeiter = relationship("User", foreign_keys=[sachbearbeiter_id])
     pruefer = relationship("User", foreign_keys=[pruefer_id])
+    unterlagen_eingegangen_von = relationship("User", foreign_keys=[unterlagen_eingegangen_von_id])
+    probe_abrechnung_von = relationship("User", foreign_keys=[probe_abrechnung_von_id])
+    probe_geprueft_von = relationship("User", foreign_keys=[probe_geprueft_von_id])
+    mandant_freigabe_von = relationship("User", foreign_keys=[mandant_freigabe_von_id])
+    endabrechnung_von = relationship("User", foreign_keys=[endabrechnung_von_id])
+    versand_von = relationship("User", foreign_keys=[versand_von_id])
+    abgeschlossen_von = relationship("User", foreign_keys=[abgeschlossen_von_id])
     items = relationship("WorkflowItem", back_populates="instanz", order_by="WorkflowItem.position")
     tickets = relationship("Ticket", back_populates="workflow_instanz")
     dokumente = relationship("Dokument", back_populates="workflow_instanz")
@@ -602,11 +624,13 @@ class AuditLog(Base):
     aktionstyp = Column(String(100), nullable=False)       # e.g. "erstellt", "statusaenderung"
     alter_wert = Column(Text, nullable=True)          # JSON string
     neuer_wert = Column(Text, nullable=True)          # JSON string
-    benutzer_id = Column(Integer, nullable=True)
+    benutzer_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     benutzerrolle = Column(String(50), nullable=True)
     zeitstempel = Column(DateTime, default=datetime.utcnow, nullable=False)
     ip_adresse = Column(String(45), nullable=True)
     beschreibung = Column(Text, nullable=True)        # human-readable summary
+
+    benutzer = relationship("User", back_populates="audit_logs")
 
 
 # ─────────────────────────────────────────
