@@ -49,6 +49,10 @@ def list_tickets(
     eskaliert: Optional[bool] = Query(None),
     monat: Optional[int] = Query(None),
     jahr: Optional[int] = Query(None),
+    kategorie: Optional[str] = Query(None),
+    zugewiesen_an_id: Optional[int] = Query(None),
+    sla_ueberfaellig: Optional[bool] = Query(None),
+    q_search: Optional[str] = Query(None, alias="q"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -77,6 +81,21 @@ def list_tickets(
         q = q.filter(Ticket.monat == monat)
     if jahr:
         q = q.filter(Ticket.jahr == jahr)
+    if kategorie:
+        q = q.filter(Ticket.kategorie == kategorie)
+    if zugewiesen_an_id:
+        q = q.filter(Ticket.zugewiesen_an_id == zugewiesen_an_id)
+    if sla_ueberfaellig:
+        q = q.filter(Ticket.faellig_bis < datetime.utcnow(), Ticket.status.in_(list(OPEN_STATUSES)))
+
+    # Full-text search across title, description, category
+    if q_search:
+        search_term = f"%{q_search}%"
+        q = q.filter(
+            Ticket.titel.ilike(search_term) |
+            Ticket.beschreibung.ilike(search_term) |
+            Ticket.kategorie.ilike(search_term)
+        )
 
     tickets = q.order_by(Ticket.created_at.desc()).all()
 
@@ -226,6 +245,12 @@ def update_ticket(
     if update_data.get("status") == TicketStatus.GESCHLOSSEN and ticket.status != TicketStatus.GESCHLOSSEN:
         update_data["geschlossen_am"] = datetime.utcnow()
         update_data["eskalationsstufe"] = None
+
+    # ABGEBROCHEN requires a reason
+    if update_data.get("status") == TicketStatus.ABGEBROCHEN:
+        abbruch_grund = update_data.get("abbruch_grund") or ticket.abbruch_grund
+        if not abbruch_grund:
+            raise HTTPException(status_code=400, detail="Abbruchgrund erforderlich")
 
     for k, v in update_data.items():
         setattr(ticket, k, v)

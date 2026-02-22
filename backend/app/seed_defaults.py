@@ -5,8 +5,9 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from app.models import (
-    AusgabewegConfig, Branche, EmailTemplate, SmtpKonfiguration,
-    SystemDefault, UploadKonfiguration,
+    AusgabewegConfig, Branche, EmailTemplate, FristenVorlage,
+    SmtpKonfiguration, SystemDefault, UploadKonfiguration,
+    WorkflowSchrittTyp, PunkteKonfiguration,
 )
 
 
@@ -108,15 +109,157 @@ DEFAULT_EMAIL_TEMPLATES = [
     },
 ]
 
+# ─────────────────────────────────────────
+# Default German Deadline Templates (Section 2.3)
+# ─────────────────────────────────────────
+
+DEFAULT_FRISTEN_VORLAGEN = [
+    {
+        "code": "PAY_DAY",
+        "name": "Lohnzahlung (Pay Day)",
+        "beschreibung": "Mandantenspezifischer Lohnzahlungstag. Häufig Monatsende oder X. des Folgemonats.",
+        "regeltyp": "relativ_monatsende",
+        "regel_config": json.dumps({"tage_nach_monatsende": 0}),
+        "default_interne_vorfrist_tage": 3,
+    },
+    {
+        "code": "SV_ZAHLUNG",
+        "name": "SV-Beitragszahlung",
+        "beschreibung": "Drittletzter Bankarbeitstag des Monats. Bankarbeitstage je nach Sitz der Einzugsstelle.",
+        "regeltyp": "relativ_bankarbeitstage",
+        "regel_config": json.dumps({"n_ter_letzter": 3}),
+        "default_interne_vorfrist_tage": 2,
+    },
+    {
+        "code": "SV_NACHWEIS",
+        "name": "SV-Beitragsnachweis",
+        "beschreibung": "Spätestens Beginn des fünftletzten Bankarbeitstags des Monats.",
+        "regeltyp": "relativ_bankarbeitstage",
+        "regel_config": json.dumps({"n_ter_letzter": 5}),
+        "default_interne_vorfrist_tage": 2,
+    },
+    {
+        "code": "LOHNSTEUER",
+        "name": "Lohnsteuer-Anmeldung & Zahlung",
+        "beschreibung": "Spätestens am 10. Tag nach Ablauf des Anmeldezeitraums. Verschiebung auf nächsten Werktag bei Sa/So/Feiertag.",
+        "regeltyp": "fixes_datum",
+        "regel_config": json.dumps({"tag": 10, "monat_offset": 1, "verschiebung_naechster_werktag": True}),
+        "default_interne_vorfrist_tage": 2,
+        "anmeldezeitraum": "monatlich",
+    },
+    {
+        "code": "SOKA_MELDUNG",
+        "name": "SOKA-BAU Monatsmeldung",
+        "beschreibung": "Monatsmeldung bis 15. des Folgemonats. Nur für SOKA-relevante Mandanten.",
+        "regeltyp": "fixes_datum",
+        "regel_config": json.dumps({"tag": 15, "monat_offset": 1}),
+        "default_interne_vorfrist_tage": 2,
+        "branchenfilter": "SOKA",
+    },
+    {
+        "code": "SOKA_ZAHLUNG",
+        "name": "SOKA-BAU Zahlung",
+        "beschreibung": "Zahlung bis 28. des Folgemonats. Nur für SOKA-relevante Mandanten.",
+        "regeltyp": "fixes_datum",
+        "regel_config": json.dumps({"tag": 28, "monat_offset": 1}),
+        "default_interne_vorfrist_tage": 2,
+        "branchenfilter": "SOKA",
+    },
+    {
+        "code": "DEUEV_JAHRESMELDUNG",
+        "name": "DEÜV-Jahresmeldung",
+        "beschreibung": "Spätestens 15. Februar des Folgejahres.",
+        "regeltyp": "fixes_datum",
+        "regel_config": json.dumps({"tag": 15, "monat_offset": 0}),
+        "default_interne_vorfrist_tage": 5,
+        "ist_jahresbezogen": True,
+    },
+    {
+        "code": "DEUEV_ANMELDUNG",
+        "name": "DEÜV-Anmeldung",
+        "beschreibung": "Mit nächster Abrechnung, spätestens 6 Wochen nach Beschäftigungsbeginn.",
+        "regeltyp": "ereignisbasiert",
+        "regel_config": json.dumps({"trigger": "neueintritt", "max_frist_wochen": 6}),
+        "default_interne_vorfrist_tage": 2,
+        "ist_ereignisbasiert": True,
+    },
+    {
+        "code": "DEUEV_SOFORTMELDUNG",
+        "name": "DEÜV-Sofortmeldung",
+        "beschreibung": "Spätestens bis Aufnahme der Beschäftigung (branchenabhängig).",
+        "regeltyp": "ereignisbasiert",
+        "regel_config": json.dumps({"trigger": "neueintritt", "sofort": True}),
+        "default_interne_vorfrist_tage": 0,
+        "ist_ereignisbasiert": True,
+    },
+    {
+        "code": "UV_LOHNNACHWEIS",
+        "name": "UV – Lohnnachweis digital",
+        "beschreibung": "Abgabe bis 16. Februar des Folgejahres.",
+        "regeltyp": "fixes_datum",
+        "regel_config": json.dumps({"tag": 16, "monat_offset": 0}),
+        "default_interne_vorfrist_tage": 5,
+        "ist_jahresbezogen": True,
+    },
+]
+
+# ─────────────────────────────────────────
+# Default Workflow Step Types (Section 8)
+# ─────────────────────────────────────────
+
+DEFAULT_WORKFLOW_SCHRITT_TYPEN = [
+    {"name": "Unterlagen anfordern", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "fristart_referenz": "PAY_DAY", "fristart_offset_tage": -10, "standard_punkte": 1.0},
+    {"name": "Datenerfassung", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "standard_punkte": 2.0},
+    {"name": "Probeabrechnung", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "standard_punkte": 2.0},
+    {"name": "4-Augen-Prüfung", "ist_pflicht": False, "standard_rolle": "pruefer", "abhaengigkeit_von": "Probeabrechnung", "standard_punkte": 1.5},
+    {"name": "SV-Beitragsnachweis erstellen", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "fristart_referenz": "SV_NACHWEIS", "fristart_offset_tage": 0, "standard_punkte": 1.0},
+    {"name": "Lohnsteuer anmelden", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "fristart_referenz": "LOHNSTEUER", "fristart_offset_tage": 0, "standard_punkte": 1.0},
+    {"name": "Mandantenfreigabe", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "standard_punkte": 0.5},
+    {"name": "Endabrechnung", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "standard_punkte": 1.5},
+    {"name": "SOKA-Meldung erstellen", "ist_pflicht": False, "standard_rolle": "sachbearbeiter", "fristart_referenz": "SOKA_MELDUNG", "fristart_offset_tage": 0, "standard_punkte": 1.0},
+    {"name": "Versand / Export", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "standard_punkte": 0.5},
+    {"name": "Monatsabschluss", "ist_pflicht": True, "standard_rolle": "sachbearbeiter", "abhaengigkeit_von": "Endabrechnung", "standard_punkte": 0.5},
+]
+
+# ─────────────────────────────────────────
+# Default Punkte-Konfiguration (Section 4.4)
+# ─────────────────────────────────────────
+
+DEFAULT_PUNKTE_KONFIGURATION = {
+    "name": "Standard-Punktekonfiguration",
+    "kategorie_basis": json.dumps({"A": 10, "B": 5, "C": 3}),
+    "mitarbeiter_stufen": json.dumps([
+        {"bis": 10, "faktor": 1.0},
+        {"bis": 50, "faktor": 1.5},
+        {"bis": 100, "faktor": 2.0},
+        {"bis": 500, "faktor": 3.0},
+        {"bis": 99999, "faktor": 4.0},
+    ]),
+    "branchen_faktoren": json.dumps({
+        "Baugewerbe": 1.3,
+        "Gastronomie": 1.1,
+        "Gesundheitswesen": 1.2,
+        "Öffentlicher Dienst": 1.2,
+    }),
+    "zusatzmodul_punkte": json.dumps({
+        "viele_eintritte": 2.0,
+        "einmalzahlungen": 1.0,
+        "kurzarbeit": 3.0,
+        "bav": 1.5,
+        "pfaendungen": 2.0,
+    }),
+}
+
 SYSTEM_DEFAULT_CONFIGS = [
     {"bereich": "branchen", "name": "Basis-Branchenliste", "konfiguration": json.dumps({"count": len(DEFAULT_BRANCHEN), "source": "system"})},
     {"bereich": "ausgabewege", "name": "Basis-Ausgabewege", "konfiguration": json.dumps({"count": len(DEFAULT_AUSGABEWEGE), "source": "system"})},
     {"bereich": "fristen", "name": "Default-Fristenkatalog", "konfiguration": json.dumps({
-        "typen": ["Unterlagen-Eingang", "Probeabrechnung", "Mandantenfreigabe", "Endabrechnung", "SV-Meldungen", "Lohnsteueranmeldung"],
-        "regeln": {"standard_offset_tage": [5, 10, 12, 14, 15, 15]},
+        "typen": [fv["code"] for fv in DEFAULT_FRISTEN_VORLAGEN],
+        "count": len(DEFAULT_FRISTEN_VORLAGEN),
     })},
     {"bereich": "workflow", "name": "Default-Workflow-Schritte", "konfiguration": json.dumps({
-        "typen": ["Datenerfassung", "Probeabrechnung", "Prüfung", "Mandantenfreigabe", "Endabrechnung", "Versand", "Monatsabschluss"],
+        "typen": [st["name"] for st in DEFAULT_WORKFLOW_SCHRITT_TYPEN],
+        "count": len(DEFAULT_WORKFLOW_SCHRITT_TYPEN),
     })},
     {"bereich": "punkte", "name": "Basis-Punktekonfiguration", "konfiguration": json.dumps({
         "basis_punkte_pro_mitarbeiter": 1.0,
@@ -124,8 +267,9 @@ SYSTEM_DEFAULT_CONFIGS = [
     })},
     {"bereich": "tickets", "name": "Ticket-Konfiguration", "konfiguration": json.dumps({
         "kategorien": ["Fehlende Unterlagen", "Rückfrage", "Korrektur", "Eskalation", "Sonstiges"],
+        "unterkategorien": {"Fehlende Unterlagen": ["Lohnzettel", "Krankmeldung", "Reisekosten"], "Korrektur": ["Nachberechnung", "Stornierung"]},
         "prioritaeten": ["niedrig", "normal", "hoch", "kritisch", "dringend"],
-        "status_modell": ["neu", "offen", "in_bearbeitung", "wartet_auf_mandant", "intern_in_klaerung", "beantwortet", "geloest", "geschlossen"],
+        "status_modell": ["neu", "offen", "in_bearbeitung", "wartet_auf_mandant", "wartet_intern", "intern_in_klaerung", "in_pruefung", "beantwortet", "geloest", "geschlossen", "abgebrochen"],
     })},
     {"bereich": "email_templates", "name": "Standard-E-Mail-Templates", "konfiguration": json.dumps({
         "count": len(DEFAULT_EMAIL_TEMPLATES),
@@ -158,6 +302,23 @@ def seed_defaults_for_bereich(db: Session, bereich: str):
             if not existing:
                 db.add(EmailTemplate(**td))
 
+    elif bereich == "fristen":
+        for fv in DEFAULT_FRISTEN_VORLAGEN:
+            existing = db.query(FristenVorlage).filter(FristenVorlage.code == fv["code"]).first()
+            if not existing:
+                db.add(FristenVorlage(**fv))
+
+    elif bereich == "workflow_schritte":
+        for st in DEFAULT_WORKFLOW_SCHRITT_TYPEN:
+            existing = db.query(WorkflowSchrittTyp).filter(WorkflowSchrittTyp.name == st["name"]).first()
+            if not existing:
+                db.add(WorkflowSchrittTyp(**st))
+
+    elif bereich == "punkte":
+        existing = db.query(PunkteKonfiguration).filter(PunkteKonfiguration.name == DEFAULT_PUNKTE_KONFIGURATION["name"]).first()
+        if not existing:
+            db.add(PunkteKonfiguration(**DEFAULT_PUNKTE_KONFIGURATION))
+
     # Update system_defaults record
     sd = db.query(SystemDefault).filter(
         SystemDefault.bereich == bereich,
@@ -189,6 +350,23 @@ def seed_all_defaults(db: Session):
     if db.query(EmailTemplate).count() == 0:
         for td in DEFAULT_EMAIL_TEMPLATES:
             db.add(EmailTemplate(**td))
+
+    # Fristen-Vorlagen (default DE deadline templates)
+    for fv in DEFAULT_FRISTEN_VORLAGEN:
+        existing = db.query(FristenVorlage).filter(FristenVorlage.code == fv["code"]).first()
+        if not existing:
+            db.add(FristenVorlage(**fv))
+
+    # Workflow-Schritt-Typen
+    for st in DEFAULT_WORKFLOW_SCHRITT_TYPEN:
+        existing = db.query(WorkflowSchrittTyp).filter(WorkflowSchrittTyp.name == st["name"]).first()
+        if not existing:
+            db.add(WorkflowSchrittTyp(**st))
+
+    # Punkte-Konfiguration
+    existing = db.query(PunkteKonfiguration).filter(PunkteKonfiguration.name == DEFAULT_PUNKTE_KONFIGURATION["name"]).first()
+    if not existing:
+        db.add(PunkteKonfiguration(**DEFAULT_PUNKTE_KONFIGURATION))
 
     # System Defaults
     for sd_config in SYSTEM_DEFAULT_CONFIGS:

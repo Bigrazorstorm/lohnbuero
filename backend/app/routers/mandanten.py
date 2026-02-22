@@ -7,8 +7,18 @@ from sqlalchemy.orm import Session
 from app import audit_service
 from app.auth import get_current_user, require_admin_or_teamleitung, require_staff
 from app.database import get_db
-from app.models import Mandant, MandantKategorie, User, MandantAenderung, Fristenprofil, Fristenregel, Sonderaufgabe, MandantKontakt, MandantNotiz
-from app.schemas import MandantCreate, MandantOut, MandantUpdate, MandantAenderungOut, FristenprofilCreate, FristenprofilOut, FristenprofilUpdate, SonderaufgabeCreate, SonderaufgabeOut, SonderaufgabeUpdate, MandantKontaktCreate, MandantKontaktOut, MandantKontaktUpdate, MandantNotizCreate, MandantNotizOut
+from app.models import (
+    Mandant, MandantKategorie, User, MandantAenderung, Fristenprofil,
+    Fristenregel, Sonderaufgabe, MandantKontakt, MandantNotiz,
+    WorkflowInstanz, Ticket, TicketStatus, FristenVorlage,
+)
+from app.schemas import (
+    MandantCreate, MandantOut, MandantUpdate, MandantAenderungOut,
+    FristenprofilCreate, FristenprofilOut, FristenprofilUpdate,
+    SonderaufgabeCreate, SonderaufgabeOut, SonderaufgabeUpdate,
+    MandantKontaktCreate, MandantKontaktOut, MandantKontaktUpdate,
+    MandantNotizCreate, MandantNotizOut,
+)
 
 router = APIRouter(prefix="/api/mandanten", tags=["mandanten"])
 
@@ -622,3 +632,144 @@ def activate_planned_changes(
 
     db.commit()
     return {"activated_mandanten": activated}
+
+
+# ─────────────────────────────────────────
+# One-Screen: Mandant-Month Combined View
+# ─────────────────────────────────────────
+
+@router.get("/{mandant_id}/monat/{monat}/{jahr}")
+def mandant_monat_one_screen(
+    mandant_id: int,
+    monat: int,
+    jahr: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_staff),
+):
+    """Combined one-screen view for a mandant-month: workflow, tickets, sonderaufgaben, fristen, blockers."""
+    import json as _json
+    from app.bankarbeitstage import berechne_frist, berechne_frist_relativ
+    from datetime import date
+
+    mandant = db.query(Mandant).filter(Mandant.id == mandant_id).first()
+    if not mandant:
+        raise HTTPException(status_code=404, detail="Mandant nicht gefunden")
+
+    # 1. Workflow
+    workflow = db.query(WorkflowInstanz).filter(
+        WorkflowInstanz.mandant_id == mandant_id,
+        WorkflowInstanz.monat == monat,
+        WorkflowInstanz.jahr == jahr,
+    ).first()
+
+    # 2. Tickets
+    open_statuses = [
+        TicketStatus.NEU, TicketStatus.OFFEN, TicketStatus.IN_BEARBEITUNG,
+        TicketStatus.WARTET_AUF_MANDANT, TicketStatus.WARTET_INTERN,
+        TicketStatus.INTERN_IN_KLAERUNG, TicketStatus.IN_PRUEFUNG,
+    ]
+    tickets = db.query(Ticket).filter(
+        Ticket.mandant_id == mandant_id,
+        Ticket.monat == monat,
+        Ticket.jahr == jahr,
+    ).order_by(Ticket.prioritaet.desc(), Ticket.created_at.desc()).all()
+
+    # 3. Sonderaufgaben
+    sonderaufgaben = db.query(Sonderaufgabe).filter(
+        Sonderaufgabe.mandant_id == mandant_id,
+        Sonderaufgabe.monat == monat,
+        Sonderaufgabe.jahr == jahr,
+    ).order_by(Sonderaufgabe.faellig_datum).all()
+
+    # 4. Fristen (from Fristenprofil)
+    fristen = []
+    if mandant.fristenprofil:
+        for regel in mandant.fristenprofil.regeln:
+            if not regel.ist_aktiv:
+                continue
+            config = _json.loads(regel.regel_config)
+            stichtag = berechne_frist(jahr, monat, regel.regeltyp.value, config, regel.bundesland)
+
+            interne_vorfrist = None
+            if stichtag and regel.interne_vorfrist_tage > 0:
+                interne_vorfrist = berechne_frist_relativ(stichtag, -regel.interne_vorfrist_tage, regel.bundesland)
+
+            heute = date.today()
+            ampel = "gruen"
+            if stichtag:
+                if heute > stichtag:
+                    ampel = "rot"
+                elif interne_vorfrist and heute >= interne_vorfrist:
+                    ampel = "gelb"
+
+            vorlage = db.query(FristenVorlage).filter(FristenVorlage.code == regel.fristart).first()
+
+            # Find affected workflow steps
+            betroffene = []
+            if workflow:
+                for item in workflow.items:
+                    if item.fristart_referenz == regel.fristart:
+                        betroffene.append(item.titel)
+
+            fristen.append({
+                "fristart": regel.fristart,
+                "name": vorlage.name if vorlage else regel.fristart,
+                "externer_stichtag": stichtag.isoformat() if stichtag else None,
+                "interne_vorfrist": interne_vorfrist.isoformat() if interne_vorfrist else None,
+                "ampel": ampel,
+                "betroffene_schritte": betroffene,
+            })
+
+    # 5. Blockers
+    blocker = []
+    open_critical_tickets = [
+        t for t in tickets
+        if t.status in open_statuses and t.prioritaet.value in ("kritisch", "dringend")
+    ]
+    for t in open_critical_tickets:
+        blocker.append(f"Ticket #{t.id}: {t.titel} ({t.prioritaet.value})")
+
+    # Check for missing documents in workflow
+    if workflow:
+        for item in workflow.items:
+            if item.ist_blockiert:
+                blocker.append(f"Schritt blockiert: {item.titel} – {item.blockiert_grund or ''}")
+
+    return {
+        "mandant_id": mandant_id,
+        "mandant_name": mandant.name,
+        "monat": monat,
+        "jahr": jahr,
+        "workflow": {
+            "id": workflow.id,
+            "status": workflow.status.value,
+            "ampelstatus": workflow.ampelstatus.value,
+            "items_total": len(workflow.items),
+            "items_erledigt": sum(1 for i in workflow.items if i.status.value == "erledigt"),
+            "sachbearbeiter": {"id": workflow.sachbearbeiter.id, "full_name": workflow.sachbearbeiter.full_name} if workflow.sachbearbeiter else None,
+            "punkte": workflow.punkte,
+        } if workflow else None,
+        "tickets": [
+            {
+                "id": t.id,
+                "titel": t.titel,
+                "status": t.status.value,
+                "prioritaet": t.prioritaet.value,
+                "eskalationsstufe": t.eskalationsstufe.value if t.eskalationsstufe else None,
+            }
+            for t in tickets
+        ],
+        "sonderaufgaben": [
+            {
+                "id": s.id,
+                "titel": s.titel,
+                "kategorie": s.kategorie,
+                "status": s.status.value,
+                "punkte": s.punkte,
+                "faellig_datum": s.faellig_datum.isoformat() if s.faellig_datum else None,
+            }
+            for s in sonderaufgaben
+        ],
+        "fristen": fristen,
+        "blocker": blocker,
+    }

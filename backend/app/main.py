@@ -7,6 +7,7 @@ from app.config import settings
 from app.database import Base, engine, run_migrations, SessionLocal
 from app.routers import admin, auth, dashboard, dokumente, mandanten, tickets, users, workflows
 from app.routers import audit, email_templates
+from app.routers import fristen, schritt_typen, reporting
 from app.models import User
 
 # Create all tables (new ones)
@@ -75,6 +76,9 @@ app.include_router(dashboard.router)
 app.include_router(audit.router)
 app.include_router(email_templates.router)
 app.include_router(admin.router)
+app.include_router(fristen.router)
+app.include_router(schritt_typen.router)
+app.include_router(reporting.router)
 
 # Serve uploaded files
 uploads_dir = "uploads"

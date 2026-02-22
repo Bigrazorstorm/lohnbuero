@@ -73,10 +73,13 @@ class TicketStatus(str, enum.Enum):
     OFFEN = "offen"
     IN_BEARBEITUNG = "in_bearbeitung"          # backward compat
     WARTET_AUF_MANDANT = "wartet_auf_mandant"
+    WARTET_INTERN = "wartet_intern"
     INTERN_IN_KLAERUNG = "intern_in_klaerung"
+    IN_PRUEFUNG = "in_pruefung"
     BEANTWORTET = "beantwortet"                # backward compat
     GELOEST = "geloest"
     GESCHLOSSEN = "geschlossen"
+    ABGEBROCHEN = "abgebrochen"
 
 
 class TicketPrioritaet(str, enum.Enum):
@@ -133,6 +136,8 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     role = Column(Enum(UserRole), nullable=False, default=UserRole.SACHBEARBEITER)
     is_active = Column(Boolean, default=True)
+    is_archived = Column(Boolean, default=False)        # login disabled, history preserved
+    anonymisiert_am = Column(DateTime, nullable=True)    # DSGVO anonymization date
     workload_limit = Column(Float, default=100.0)  # max points per month
     current_workload = Column(Float, default=0.0)  # current assigned points
     total_points_earned = Column(Float, default=0.0)
@@ -361,8 +366,12 @@ class WorkflowVorlageItem(Base):
     verantwortlich_rolle = Column(Enum(UserRole))
     faellig_offset_tage = Column(Integer, default=0)  # days after month start
     ist_pflicht = Column(Boolean, default=True)
+    ist_optional_pro_mandant = Column(Boolean, default=False)  # can be activated per mandant
     erfordert_dokument = Column(Boolean, default=False)
     erfordert_pruefung = Column(Boolean, default=False)  # 4-eyes
+    fristart_referenz = Column(String, nullable=True)  # e.g. "SV-Zahlung", links to Fristart
+    fristart_offset_tage = Column(Integer, default=0)  # offset from the referenced deadline (negative = before)
+    standard_punkte = Column(Float, default=1.0)  # default points for this step
 
     vorlage = relationship("WorkflowVorlage", back_populates="items")
 
@@ -421,19 +430,24 @@ class WorkflowItem(Base):
     titel = Column(String, nullable=False)
     beschreibung = Column(Text)
     verantwortlich_rolle = Column(Enum(UserRole))
+    zugewiesen_an_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     faellig_datum = Column(DateTime, nullable=True)
     ist_pflicht = Column(Boolean, default=True)
     erfordert_dokument = Column(Boolean, default=False)
     erfordert_pruefung = Column(Boolean, default=False)
+    fristart_referenz = Column(String, nullable=True)  # links to Fristart for deadline coupling
 
     status = Column(Enum(ChecklistItemStatus), default=ChecklistItemStatus.OFFEN)
     erledigt_am = Column(DateTime, nullable=True)
     erledigt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     notiz = Column(Text)
     punkte = Column(Float, default=0.0)
+    ist_blockiert = Column(Boolean, default=False)
+    blockiert_grund = Column(String, nullable=True)  # e.g. "Wartet auf Ticket #12"
 
     instanz = relationship("WorkflowInstanz", back_populates="items")
-    erledigt_von = relationship("User", back_populates="workflow_items_erledigt")
+    zugewiesen_an = relationship("User", foreign_keys=[zugewiesen_an_id])
+    erledigt_von = relationship("User", back_populates="workflow_items_erledigt", foreign_keys=[erledigt_von_id])
     dokumente = relationship("Dokument", back_populates="workflow_item")
 
 
@@ -455,6 +469,7 @@ class Ticket(Base):
     status = Column(Enum(TicketStatus), default=TicketStatus.NEU)
     prioritaet = Column(Enum(TicketPrioritaet), default=TicketPrioritaet.NORMAL)
     kategorie = Column(String)
+    unterkategorie = Column(String, nullable=True)
 
     # Month reference (which payroll month this ticket belongs to)
     monat = Column(Integer, nullable=True)
@@ -463,6 +478,13 @@ class Ticket(Base):
     # SLA & Escalation
     faellig_bis = Column(DateTime, nullable=True)
     eskalationsstufe = Column(Enum(EskalationStufe), nullable=True)
+    wiedervorlage_datum = Column(DateTime, nullable=True)
+
+    # Abbruch
+    abbruch_grund = Column(Text, nullable=True)
+
+    # Workflow-Item linking (optional)
+    workflow_item_id = Column(Integer, ForeignKey("workflow_items.id"), nullable=True)
 
     geschlossen_am = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -470,6 +492,7 @@ class Ticket(Base):
 
     mandant = relationship("Mandant", back_populates="tickets")
     workflow_instanz = relationship("WorkflowInstanz", back_populates="tickets")
+    workflow_item = relationship("WorkflowItem", foreign_keys=[workflow_item_id])
     erstellt_von = relationship("User", back_populates="tickets_erstellt", foreign_keys=[erstellt_von_id])
     zugewiesen_an = relationship("User", foreign_keys=[zugewiesen_an_id])
     kommentare = relationship("TicketKommentar", back_populates="ticket", order_by="TicketKommentar.created_at")
@@ -757,5 +780,90 @@ class UploadKonfiguration(Base):
     id = Column(Integer, primary_key=True, index=True)
     max_dateigroesse_mb = Column(Integer, default=10)
     erlaubte_dateitypen = Column(Text, default='["pdf","doc","docx","xls","xlsx","csv","jpg","jpeg","png","txt","zip"]')
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────
+# Fristen-Vorlagen (Default Deadline Templates)
+# ─────────────────────────────────────────
+
+class FristenVorlage(Base):
+    """Default deadline type templates (DE). Can be activated per mandant."""
+    __tablename__ = "fristen_vorlagen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    code = Column(String, unique=True, nullable=False)          # e.g. "SV_ZAHLUNG"
+    name = Column(String, nullable=False)                       # e.g. "SV-Beitragszahlung"
+    beschreibung = Column(Text, nullable=True)
+    regeltyp = Column(Enum(FristenRegeltyp), nullable=False)
+    regel_config = Column(Text, nullable=False)                 # JSON config
+    default_interne_vorfrist_tage = Column(Integer, default=2)
+    ist_jahresbezogen = Column(Boolean, default=False)          # e.g. DEÜV Jahresmeldung, UV
+    ist_ereignisbasiert = Column(Boolean, default=False)        # e.g. DEÜV Sofortmeldung
+    branchenfilter = Column(String, nullable=True)              # null = all, "SOKA" = only SOKA-relevant
+    anmeldezeitraum = Column(String, nullable=True)             # "monatlich", "vierteljaehrlich", "jaehrlich"
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ─────────────────────────────────────────
+# WorkflowSchrittTyp (Admin-definable workflow step types)
+# ─────────────────────────────────────────
+
+class WorkflowSchrittTyp(Base):
+    """Admin-definable workflow step types per Section 8."""
+    __tablename__ = "workflow_schritt_typen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    beschreibung = Column(Text, nullable=True)
+    ist_pflicht = Column(Boolean, default=True)
+    standard_rolle = Column(Enum(UserRole), nullable=True)      # default role
+    abhaengigkeit_von = Column(String, nullable=True)           # name of blocking step type
+    fristart_referenz = Column(String, nullable=True)           # e.g. "SV_ZAHLUNG"
+    fristart_offset_tage = Column(Integer, default=0)           # offset from deadline
+    standard_punkte = Column(Float, default=1.0)
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────
+# Mandant-specific Workflow Step Activation
+# ─────────────────────────────────────────
+
+class MandantWorkflowSchritt(Base):
+    """Activates optional workflow step types for a specific mandant."""
+    __tablename__ = "mandant_workflow_schritte"
+
+    id = Column(Integer, primary_key=True, index=True)
+    mandant_id = Column(Integer, ForeignKey("mandanten.id"), nullable=False)
+    schritt_typ_id = Column(Integer, ForeignKey("workflow_schritt_typen.id"), nullable=False)
+    ist_aktiv = Column(Boolean, default=True)
+    aenderung_zum = Column(DateTime, nullable=True)     # effective date
+    erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    mandant = relationship("Mandant", backref="workflow_schritte")
+    schritt_typ = relationship("WorkflowSchrittTyp")
+    erstellt_von = relationship("User", foreign_keys=[erstellt_von_id])
+
+
+# ─────────────────────────────────────────
+# Punkte-Konfiguration (Workload Point Rules)
+# ─────────────────────────────────────────
+
+class PunkteKonfiguration(Base):
+    """Admin-configurable point calculation rules per Section 4.4."""
+    __tablename__ = "punkte_konfigurationen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)                       # e.g. "Standard", "SOKA"
+    kategorie_basis = Column(Text, nullable=False)              # JSON: {"A": 10, "B": 5, "C": 3}
+    mitarbeiter_stufen = Column(Text, nullable=False)           # JSON: [{"bis": 10, "faktor": 1.0}, {"bis": 50, "faktor": 1.5}]
+    branchen_faktoren = Column(Text, nullable=True)             # JSON: {"Baugewerbe": 1.3}
+    zusatzmodul_punkte = Column(Text, nullable=True)            # JSON: {"viele_eintritte": 2, "einmalzahlungen": 1}
+    ist_aktiv = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

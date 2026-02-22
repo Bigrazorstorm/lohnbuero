@@ -134,16 +134,19 @@ export interface WorkflowInstanzShort {
   mandant?: { id: number; name: string; nummer?: string; kategorie: MandantKategorie; ist_aktiv: boolean }
 }
 
-// Extended ticket statuses per Nachtrag v1.2
+// Extended ticket statuses per Nachtrag v1.5
 export type TicketStatus =
   | 'neu'
   | 'offen'
   | 'in_bearbeitung'          // backward compat
   | 'wartet_auf_mandant'
+  | 'wartet_intern'
   | 'intern_in_klaerung'
+  | 'in_pruefung'
   | 'beantwortet'             // backward compat
   | 'geloest'
   | 'geschlossen'
+  | 'abgebrochen'
 
 export type TicketPrioritaet = 'niedrig' | 'normal' | 'hoch' | 'kritisch' | 'dringend'
 
