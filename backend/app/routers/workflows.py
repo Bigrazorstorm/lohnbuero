@@ -331,9 +331,19 @@ def update_workflow_item(
         if update_data["status"] == ChecklistItemStatus.ERLEDIGT:
             item.erledigt_am = datetime.utcnow()
             item.erledigt_von_id = current_user.id
+            # Add points
+            points = item.punkte or 1.0  # Default 1 if not set
+            current_user.total_points_earned += points
+            current_user.current_workload -= points
+            item.instanz.punkte += points
         elif item.status == ChecklistItemStatus.ERLEDIGT:
             item.erledigt_am = None
             item.erledigt_von_id = None
+            # Subtract points if undone
+            points = item.punkte or 1.0
+            current_user.total_points_earned -= points
+            current_user.current_workload += points
+            item.instanz.punkte -= points
 
     for k, v in update_data.items():
         setattr(item, k, v)
@@ -378,7 +388,15 @@ def _update_ampel(db: Session, instanz_id: int):
         if i.faellig_datum and now <= i.faellig_datum <= now + timedelta(days=2)
     ]
 
-    if overdue:
+    # Check for blocking tickets
+    critical_tickets = db.query(Ticket).filter(
+        Ticket.mandant_id == instanz.mandant_id,
+        Ticket.workflow_instanz_id == instanz_id,
+        Ticket.prioritaet == TicketPrioritaet.KRITISCH,
+        Ticket.status.in_(OPEN_STATUSES)
+    ).count() > 0
+
+    if overdue or critical_tickets:
         instanz.ampelstatus = Ampelstatus.ROT
     elif warning:
         instanz.ampelstatus = Ampelstatus.GELB

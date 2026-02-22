@@ -6,6 +6,9 @@ export interface User {
   full_name: string
   role: UserRole
   is_active: boolean
+  workload_limit?: number
+  current_workload?: number
+  total_points_earned?: number
   created_at: string
 }
 
@@ -38,10 +41,14 @@ export interface Mandant {
   portal_user_id?: number
   stundensatz?: number
   monatspauschale?: number
+  fristenprofil_id?: number
   ist_aktiv: boolean
   onboarding_abgeschlossen?: boolean
   sachbearbeiter?: UserShort
   vertretung?: UserShort
+  fristenprofil?: Fristenprofil
+  kontakte: MandantKontakt[]
+  notizen: MandantNotiz[]
   branchen_liste: Branche[]
   aenderungen: MandantAenderung[]
   created_at: string
@@ -86,6 +93,8 @@ export interface WorkflowItem {
   erledigt_am?: string
   erledigt_von?: UserShort
   notiz?: string
+  blocker_von?: number // ID of blocking item
+  punkte?: number
 }
 
 export interface WorkflowInstanz {
@@ -107,7 +116,10 @@ export interface WorkflowInstanz {
   versand_am?: string
   abgeschlossen_am?: string
   wiedereroeffnet_am?: string
+  wiedereroeffnet_begruendung?: string
   notizen?: string
+  punkte?: number
+  blocker_indikatoren?: BlockerIndikator[]
   created_at: string
   items: WorkflowItem[]
 }
@@ -136,6 +148,14 @@ export type TicketStatus =
 export type TicketPrioritaet = 'niedrig' | 'normal' | 'hoch' | 'kritisch' | 'dringend'
 
 export type EskalationStufe = 'reminder' | 'teamleitung' | 'leitung'
+
+export type EmailLogStatus = 'gesendet' | 'zugestellt' | 'gebounced'
+
+export type FristenRegeltyp = 'fixes_datum' | 'relativ_monatsende' | 'relativ_bankarbeitstage' | 'relativ_andere_frist' | 'ereignisbasiert'
+
+export type SonderaufgabeStatus = 'offen' | 'in_bearbeitung' | 'abgeschlossen' | 'abgebrochen'
+
+export type MandantKontaktRolle = 'ansprechpartner' | 'ticket_kommunikation' | 'upload_reminder'
 
 export interface TicketKommentar {
   id: number
