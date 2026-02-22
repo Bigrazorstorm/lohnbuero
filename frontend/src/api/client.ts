@@ -118,3 +118,53 @@ export const emailTemplatesApi = {
   logs: (mandantId?: number) =>
     api.get('/email-templates/logs/', { params: mandantId ? { mandant_id: mandantId } : {} }),
 }
+
+// ── Admin Stammdaten ─────────────────────────
+export const adminApi = {
+  // Branchen
+  listBranchen: (includeArchiviert = false) =>
+    api.get('/admin/branchen', { params: { include_archiviert: includeArchiviert } }),
+  createBranche: (data: unknown) => api.post('/admin/branchen', data),
+  updateBranche: (id: number, data: unknown) => api.patch(`/admin/branchen/${id}`, data),
+  archiveBranche: (id: number) => api.delete(`/admin/branchen/${id}`),
+
+  // Ausgabewege
+  listAusgabewege: () => api.get('/admin/ausgabewege'),
+  createAusgabeweg: (data: unknown) => api.post('/admin/ausgabewege', data),
+  updateAusgabeweg: (id: number, data: unknown) => api.patch(`/admin/ausgabewege/${id}`, data),
+  deactivateAusgabeweg: (id: number) => api.delete(`/admin/ausgabewege/${id}`),
+
+  // SMTP
+  listSmtp: () => api.get('/admin/smtp'),
+  createSmtp: (data: unknown) => api.post('/admin/smtp', data),
+  updateSmtp: (id: number, data: unknown) => api.patch(`/admin/smtp/${id}`, data),
+  testSmtp: (id: number, empfaenger: string) =>
+    api.post(`/admin/smtp/${id}/test`, null, { params: { empfaenger } }),
+  deleteSmtp: (id: number) => api.delete(`/admin/smtp/${id}`),
+
+  // IMAP
+  listImap: () => api.get('/admin/imap'),
+  createImap: (data: unknown) => api.post('/admin/imap', data),
+  updateImap: (id: number, data: unknown) => api.patch(`/admin/imap/${id}`, data),
+  deleteImap: (id: number) => api.delete(`/admin/imap/${id}`),
+
+  // Defaults
+  listDefaults: (bereich?: string) =>
+    api.get('/admin/defaults', { params: bereich ? { bereich } : {} }),
+  resetDefaults: (bereich: string) => api.post(`/admin/defaults/reset/${bereich}`),
+
+  // Upload Config
+  getUploadConfig: () => api.get('/admin/upload-config'),
+  updateUploadConfig: (data: unknown) => api.patch('/admin/upload-config', data),
+}
+
+// ── Ticket-Anhänge ───────────────────────────
+export const ticketAnhangApi = {
+  upload: (ticketId: number, formData: FormData) =>
+    api.post(`/tickets/${ticketId}/anhaenge`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }),
+  list: (ticketId: number) => api.get(`/tickets/${ticketId}/anhaenge`),
+  delete: (ticketId: number, anhangId: number, begruendung: string) =>
+    api.delete(`/tickets/${ticketId}/anhaenge/${anhangId}`, { params: { begruendung } }),
+}

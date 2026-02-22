@@ -12,6 +12,8 @@ import Users from './pages/Users'
 import Vorlagen from './pages/Vorlagen'
 import Audit from './pages/Audit'
 import EmailTemplates from './pages/EmailTemplates'
+import AdminStammdaten from './pages/AdminStammdaten'
+import AdminMailConfig from './pages/AdminMailConfig'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -64,6 +66,22 @@ export default function App() {
         />
         <Route path="vorlagen" element={<Vorlagen />} />
         <Route path="email-templates" element={<EmailTemplates />} />
+        <Route
+          path="admin/stammdaten"
+          element={
+            <RequireAdmin>
+              <AdminStammdaten />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="admin/mail"
+          element={
+            <RequireAdmin>
+              <AdminMailConfig />
+            </RequireAdmin>
+          }
+        />
         <Route path="audit" element={<Audit />} />
       </Route>
 

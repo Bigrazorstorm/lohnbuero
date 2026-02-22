@@ -1,6 +1,8 @@
 import { useState, FormEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
-import type { User } from '../types'
+import { adminApi } from '../api/client'
+import type { User, Branche, AusgabewegConfig } from '../types'
 
 interface Props {
   sachbearbeiterList: User[]
@@ -29,6 +31,17 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
     ...initial,
   })
 
+  // Fetch branchen and ausgabewege from admin API
+  const { data: branchen = [] } = useQuery<Branche[]>({
+    queryKey: ['branchen'],
+    queryFn: () => adminApi.listBranchen().then(r => r.data).catch(() => []),
+  })
+
+  const { data: ausgabewege = [] } = useQuery<AusgabewegConfig[]>({
+    queryKey: ['ausgabewege'],
+    queryFn: () => adminApi.listAusgabewege().then(r => r.data).catch(() => []),
+  })
+
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
 
   const handleSubmit = (e: FormEvent) => {
@@ -44,6 +57,11 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
     if (!payload.nummer) delete payload.nummer
     onSubmit(payload)
   }
+
+  // Determine whether to use dynamic lists or fallback static options
+  const hasBranchen = branchen.length > 0
+  const hasAusgabewege = ausgabewege.length > 0
+  const activeAusgabewege = ausgabewege.filter(a => a.ist_aktiv)
 
   return (
     <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
@@ -65,7 +83,16 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
             </div>
             <div>
               <label className="label">Branche</label>
-              <input className="input" value={form.branche as string} onChange={e => set('branche', e.target.value)} />
+              {hasBranchen ? (
+                <select className="input" value={form.branche as string} onChange={e => set('branche', e.target.value)}>
+                  <option value="">– auswählen –</option>
+                  {branchen.filter(b => !b.ist_archiviert).map(b => (
+                    <option key={b.id} value={b.name}>{b.name}{b.soka_relevant ? ' (SOKA)' : ''}</option>
+                  ))}
+                </select>
+              ) : (
+                <input className="input" value={form.branche as string} onChange={e => set('branche', e.target.value)} />
+              )}
             </div>
             <div>
               <label className="label">Ansprechpartner Name</label>
@@ -88,13 +115,25 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
               </select>
             </div>
             <div>
-              <label className="label">Abgabeweg</label>
-              <select className="input" value={form.abgabeweg as string} onChange={e => set('abgabeweg', e.target.value)}>
-                <option value="email">E-Mail</option>
-                <option value="portal">Portal</option>
-                <option value="post">Post</option>
-                <option value="fax">Fax</option>
-              </select>
+              <label className="label">Ausgabeweg</label>
+              {hasAusgabewege ? (
+                <select className="input" value={form.abgabeweg as string} onChange={e => set('abgabeweg', e.target.value)}>
+                  {activeAusgabewege.map(a => (
+                    <option key={a.id} value={a.name.toLowerCase()}>{a.name}</option>
+                  ))}
+                  {/* Fallback static options if API values don't match */}
+                  {!activeAusgabewege.some(a => a.name.toLowerCase() === form.abgabeweg) && (
+                    <option value={form.abgabeweg as string}>{form.abgabeweg}</option>
+                  )}
+                </select>
+              ) : (
+                <select className="input" value={form.abgabeweg as string} onChange={e => set('abgabeweg', e.target.value)}>
+                  <option value="email">E-Mail</option>
+                  <option value="portal">Portal</option>
+                  <option value="post">Post</option>
+                  <option value="fax">Fax</option>
+                </select>
+              )}
             </div>
             <div>
               <label className="label">Lohnabschluss Tag (im Monat)</label>
@@ -125,7 +164,7 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
               </select>
             </div>
             <div>
-              <label className="label">Monatspauschale (€)</label>
+              <label className="label">Monatspauschale (EUR)</label>
               <input type="number" step="0.01" className="input" value={form.monatspauschale as string}
                 onChange={e => set('monatspauschale', e.target.value)} />
             </div>
@@ -148,7 +187,7 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
               form?.requestSubmit()
             }}
           >
-            {loading ? 'Speichern…' : 'Mandant anlegen'}
+            {loading ? 'Speichern...' : 'Mandant anlegen'}
           </button>
         </div>
       </div>

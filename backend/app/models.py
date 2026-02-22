@@ -3,11 +3,23 @@ import json
 from datetime import datetime
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text, Float
+    Boolean, Column, DateTime, Enum, ForeignKey, Integer, String, Text, Float, Table
 )
 from sqlalchemy.orm import relationship
 
 from app.database import Base
+
+
+# ─────────────────────────────────────────
+# Association Tables
+# ─────────────────────────────────────────
+
+mandant_branchen = Table(
+    "mandant_branchen",
+    Base.metadata,
+    Column("mandant_id", Integer, ForeignKey("mandanten.id"), primary_key=True),
+    Column("branche_id", Integer, ForeignKey("branchen.id"), primary_key=True),
+)
 
 
 # ─────────────────────────────────────────
@@ -164,6 +176,7 @@ class Mandant(Base):
     dokumente = relationship("Dokument", back_populates="mandant")
     eskalationen = relationship("EskalationLog", back_populates="mandant")
     email_logs = relationship("EmailLog", back_populates="mandant")
+    branchen_liste = relationship("Branche", secondary=mandant_branchen, back_populates="mandanten")
 
 
 # ─────────────────────────────────────────
@@ -307,6 +320,7 @@ class Ticket(Base):
     erstellt_von = relationship("User", back_populates="tickets_erstellt", foreign_keys=[erstellt_von_id])
     zugewiesen_an = relationship("User", foreign_keys=[zugewiesen_an_id])
     kommentare = relationship("TicketKommentar", back_populates="ticket", order_by="TicketKommentar.created_at")
+    anhaenge = relationship("TicketAnhang", back_populates="ticket", order_by="TicketAnhang.created_at")
 
 
 class TicketKommentar(Base):
@@ -323,6 +337,7 @@ class TicketKommentar(Base):
     ticket = relationship("Ticket", back_populates="kommentare")
     autor = relationship("User", back_populates="ticket_kommentare")
     zitat = relationship("TicketKommentar", remote_side="TicketKommentar.id", foreign_keys=[zitat_id])
+    anhaenge = relationship("TicketAnhang", back_populates="kommentar", order_by="TicketAnhang.created_at")
 
 
 # ─────────────────────────────────────────
@@ -451,3 +466,143 @@ class EmailLog(Base):
 
     template = relationship("EmailTemplate", back_populates="logs")
     mandant = relationship("Mandant", back_populates="email_logs")
+
+
+# ─────────────────────────────────────────
+# Branche (Admin Stammdaten)
+# ─────────────────────────────────────────
+
+class Branche(Base):
+    __tablename__ = "branchen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    beschreibung = Column(Text, nullable=True)
+    faktor = Column(Float, default=1.0)               # Punkte-/Komplexitätsfaktor
+    soka_relevant = Column(Boolean, default=False)     # SOKA-Relevanz
+    tags = Column(Text, nullable=True)                 # JSON-encoded list of tags
+    ist_archiviert = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    mandanten = relationship("Mandant", secondary=mandant_branchen, back_populates="branchen_liste")
+
+
+# ─────────────────────────────────────────
+# Ausgabeweg (Admin Stammdaten)
+# ─────────────────────────────────────────
+
+class AusgabewegConfig(Base):
+    __tablename__ = "ausgabeweg_configs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True)
+    beschreibung = Column(Text, nullable=True)
+    ist_aktiv = Column(Boolean, default=True)
+    beeinflusst_workflow = Column(Boolean, default=False)  # adds extra workflow steps
+    zusatz_workflow_schritt = Column(String, nullable=True)  # e.g. "Upload ins Portal"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────
+# Ticket-Anhänge
+# ─────────────────────────────────────────
+
+class TicketAnhang(Base):
+    __tablename__ = "ticket_anhaenge"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ticket_id = Column(Integer, ForeignKey("tickets.id"), nullable=False)
+    kommentar_id = Column(Integer, ForeignKey("ticket_kommentare.id"), nullable=True)
+    dateiname = Column(String, nullable=False)
+    dateityp = Column(String, nullable=True)
+    dateigroesse = Column(Integer, nullable=True)        # bytes
+    speicherort = Column(String, nullable=False)
+    hash = Column(String, nullable=True)                 # file hash for integrity
+    hochgeladen_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    ist_intern = Column(Boolean, default=False)          # internal-only, not visible to mandant
+    ist_geloescht = Column(Boolean, default=False)       # logical delete
+    loeschung_begruendung = Column(Text, nullable=True)
+    geloescht_am = Column(DateTime, nullable=True)
+    geloescht_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    ticket = relationship("Ticket", back_populates="anhaenge")
+    kommentar = relationship("TicketKommentar", back_populates="anhaenge")
+    hochgeladen_von = relationship("User", foreign_keys=[hochgeladen_von_id])
+    geloescht_von = relationship("User", foreign_keys=[geloescht_von_id])
+
+
+# ─────────────────────────────────────────
+# SMTP-Konfiguration (Admin Mail)
+# ─────────────────────────────────────────
+
+class SmtpKonfiguration(Base):
+    __tablename__ = "smtp_konfigurationen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, default="Standard")
+    server = Column(String, nullable=False)
+    port = Column(Integer, nullable=False, default=587)
+    tls_ssl = Column(String, default="starttls")       # "starttls", "ssl", "none"
+    auth_user = Column(String, nullable=True)
+    auth_password_encrypted = Column(String, nullable=True)
+    absender_email = Column(String, nullable=False)
+    reply_to = Column(String, nullable=True)
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────
+# IMAP-Konfiguration (Admin Mail)
+# ─────────────────────────────────────────
+
+class ImapKonfiguration(Base):
+    __tablename__ = "imap_konfigurationen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, default="Standard")
+    server = Column(String, nullable=False)
+    port = Column(Integer, nullable=False, default=993)
+    tls_ssl = Column(String, default="ssl")            # "ssl", "starttls", "none"
+    auth_user = Column(String, nullable=True)
+    auth_password_encrypted = Column(String, nullable=True)
+    postfach = Column(String, default="INBOX")
+    ordner = Column(String, nullable=True)              # e.g. "INBOX/Tickets"
+    polling_intervall_sekunden = Column(Integer, default=300)
+    zuordnung_methode = Column(String, default="betreff")  # "betreff", "message_id", "reply_to_token"
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────
+# System-Defaults (Admin)
+# ─────────────────────────────────────────
+
+class SystemDefault(Base):
+    __tablename__ = "system_defaults"
+
+    id = Column(Integer, primary_key=True, index=True)
+    bereich = Column(String, nullable=False)            # e.g. "branchen", "ausgabewege", "fristen", etc.
+    name = Column(String, nullable=False)
+    konfiguration = Column(Text, nullable=True)          # JSON config
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────
+# Upload-Konfiguration (Anhänge)
+# ─────────────────────────────────────────
+
+class UploadKonfiguration(Base):
+    __tablename__ = "upload_konfigurationen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    max_dateigroesse_mb = Column(Integer, default=10)
+    erlaubte_dateitypen = Column(Text, default='["pdf","doc","docx","xls","xlsx","csv","jpg","jpeg","png","txt","zip"]')
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

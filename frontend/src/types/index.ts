@@ -42,6 +42,7 @@ export interface Mandant {
   onboarding_abgeschlossen?: boolean
   sachbearbeiter?: UserShort
   vertretung?: UserShort
+  branchen_liste: Branche[]
   created_at: string
 }
 
@@ -129,6 +130,7 @@ export interface TicketKommentar {
   inhalt: string
   ist_intern: boolean
   zitat_id?: number
+  anhaenge: TicketAnhang[]
   created_at: string
 }
 
@@ -152,6 +154,7 @@ export interface Ticket {
   created_at: string
   updated_at: string
   kommentare: TicketKommentar[]
+  anhaenge: TicketAnhang[]
 }
 
 export interface DashboardStats {
@@ -255,4 +258,97 @@ export interface TicketKPIs {
   eskaliert: number
   kritisch_offen: number
   avg_antwortzeit_stunden?: number
+}
+
+// ── Branche (Admin Stammdaten) ────────────────────────────
+export interface Branche {
+  id: number
+  name: string
+  beschreibung?: string
+  faktor: number
+  soka_relevant: boolean
+  tags?: string
+  ist_archiviert: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ── Ausgabeweg Config (Admin Stammdaten) ──────────────────
+export interface AusgabewegConfig {
+  id: number
+  name: string
+  beschreibung?: string
+  ist_aktiv: boolean
+  beeinflusst_workflow: boolean
+  zusatz_workflow_schritt?: string
+  created_at: string
+  updated_at: string
+}
+
+// ── Ticket-Anhänge ────────────────────────────────────────
+export interface TicketAnhang {
+  id: number
+  ticket_id: number
+  kommentar_id?: number
+  dateiname: string
+  dateityp?: string
+  dateigroesse?: number
+  speicherort: string
+  hash?: string
+  hochgeladen_von?: UserShort
+  ist_intern: boolean
+  ist_geloescht: boolean
+  created_at: string
+}
+
+// ── SMTP-Konfiguration ───────────────────────────────────
+export interface SmtpKonfiguration {
+  id: number
+  name: string
+  server: string
+  port: number
+  tls_ssl: string
+  auth_user?: string
+  absender_email: string
+  reply_to?: string
+  ist_aktiv: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ── IMAP-Konfiguration ───────────────────────────────────
+export interface ImapKonfiguration {
+  id: number
+  name: string
+  server: string
+  port: number
+  tls_ssl: string
+  auth_user?: string
+  postfach: string
+  ordner?: string
+  polling_intervall_sekunden: number
+  zuordnung_methode: string
+  ist_aktiv: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ── System-Defaults ──────────────────────────────────────
+export interface SystemDefault {
+  id: number
+  bereich: string
+  name: string
+  konfiguration?: string
+  ist_aktiv: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ── Upload-Konfiguration ─────────────────────────────────
+export interface UploadKonfiguration {
+  id: number
+  max_dateigroesse_mb: number
+  erlaubte_dateitypen: string
+  created_at: string
+  updated_at: string
 }

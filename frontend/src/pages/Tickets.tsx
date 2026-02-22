@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Plus, MessageSquare, Search, AlertTriangle, Lock, Globe, ChevronUp } from 'lucide-react'
+import { Plus, MessageSquare, Search, AlertTriangle, Lock, Globe, ChevronUp, Paperclip, Download, Trash2, FileText } from 'lucide-react'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import toast from 'react-hot-toast'
-import { ticketsApi, mandantenApi } from '../api/client'
-import type { Ticket, TicketStatus, Mandant, TicketKommentar, TicketKPIs } from '../types'
+import { ticketsApi, mandantenApi, ticketAnhangApi } from '../api/client'
+import type { Ticket, TicketStatus, Mandant, TicketKommentar, TicketKPIs, TicketAnhang } from '../types'
 import { TicketStatusBadge, PrioritaetBadge } from '../components/StatusBadge'
 import { useAuthStore } from '../store/auth'
 
@@ -234,6 +234,7 @@ function TicketDetail({ ticket, onUpdate, onEskalieren, onClose }: {
   const isMandant = user?.role === 'mandant'
   const [kommentar, setKommentar] = useState('')
   const [istIntern, setIstIntern] = useState(false)
+  const [showAttachments, setShowAttachments] = useState(false)
 
   const { data: detail } = useQuery<Ticket>({
     queryKey: ['ticket', ticket.id],
@@ -252,7 +253,50 @@ function TicketDetail({ ticket, onUpdate, onEskalieren, onClose }: {
     onError: () => toast.error('Fehler'),
   })
 
+  const uploadMut = useMutation({
+    mutationFn: (formData: FormData) => ticketAnhangApi.upload(ticket.id, formData),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+      toast.success('Anhang hochgeladen')
+    },
+    onError: (e: any) => toast.error(e.response?.data?.detail || 'Upload fehlgeschlagen'),
+  })
+
+  const deleteMut = useMutation({
+    mutationFn: ({ anhangId, begruendung }: { anhangId: number; begruendung: string }) =>
+      ticketAnhangApi.delete(ticket.id, anhangId, begruendung),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['ticket', ticket.id] })
+      toast.success('Anhang gelöscht')
+    },
+  })
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('ist_intern', String(istIntern))
+    uploadMut.mutate(formData)
+    e.target.value = ''
+  }
+
+  const handleDeleteAnhang = (anhang: TicketAnhang) => {
+    const begruendung = prompt('Begründung für die Löschung:')
+    if (begruendung && begruendung.length >= 3) {
+      deleteMut.mutate({ anhangId: anhang.id, begruendung })
+    }
+  }
+
+  const formatFileSize = (bytes?: number) => {
+    if (!bytes) return ''
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
   const t = detail ?? ticket
+  const anhaenge = (t.anhaenge || []).filter((a: TicketAnhang) => !a.ist_geloescht)
 
   const canEskalieren = !isMandant && t.status !== 'geschlossen' && t.status !== 'geloest' && t.eskalationsstufe !== 'leitung'
 
@@ -355,6 +399,39 @@ function TicketDetail({ ticket, onUpdate, onEskalieren, onClose }: {
         )}
       </div>
 
+      {/* Anhänge section */}
+      {anhaenge.length > 0 && (
+        <div className="border-t pt-2 mb-2">
+          <button
+            className="text-xs font-semibold text-gray-500 uppercase flex items-center gap-1 hover:text-gray-700"
+            onClick={() => setShowAttachments(!showAttachments)}
+          >
+            <Paperclip size={12} />
+            Anhänge ({anhaenge.length})
+          </button>
+          {showAttachments && (
+            <div className="mt-2 space-y-1">
+              {anhaenge.map((a: TicketAnhang) => (
+                <div key={a.id} className={`flex items-center gap-2 text-xs p-1.5 rounded ${a.ist_intern ? 'bg-amber-50' : 'bg-gray-50'}`}>
+                  <FileText size={14} className="text-gray-400 flex-shrink-0" />
+                  <span className="flex-1 truncate text-gray-700">{a.dateiname}</span>
+                  <span className="text-gray-400">{formatFileSize(a.dateigroesse)}</span>
+                  {a.ist_intern && <Lock size={10} className="text-amber-500" />}
+                  <a href={a.speicherort} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:text-blue-700" title="Herunterladen">
+                    <Download size={13} />
+                  </a>
+                  {!isMandant && (
+                    <button onClick={() => handleDeleteAnhang(a)} className="text-red-400 hover:text-red-600" title="Löschen">
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Add comment */}
       {t.status !== 'geschlossen' && (
         <div className="pt-3 border-t space-y-2">
@@ -375,7 +452,7 @@ function TicketDetail({ ticket, onUpdate, onEskalieren, onClose }: {
           <div className="flex gap-2">
             <input
               className="input flex-1 text-sm"
-              placeholder={istIntern ? 'Interne Notiz…' : 'Antwort schreiben…'}
+              placeholder={istIntern ? 'Interne Notiz...' : 'Antwort schreiben...'}
               value={kommentar}
               onChange={(e) => setKommentar(e.target.value)}
               onKeyDown={(e) => {
@@ -384,6 +461,10 @@ function TicketDetail({ ticket, onUpdate, onEskalieren, onClose }: {
                 }
               }}
             />
+            <label className="btn-secondary text-sm py-2 px-3 cursor-pointer" title="Anhang hochladen">
+              <Paperclip size={15} />
+              <input type="file" className="hidden" onChange={handleFileUpload} disabled={uploadMut.isPending} />
+            </label>
             <button
               className={`text-sm py-2 px-4 rounded-lg font-medium transition-colors ${
                 istIntern
