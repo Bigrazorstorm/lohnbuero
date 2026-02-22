@@ -4,9 +4,13 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
 
-# MySQL requires pymysql driver and doesn't need check_same_thread
+# Configure connection arguments based on database type
 connect_args = {}
-if not settings.database_url.startswith("sqlite"):
+if settings.database_url.startswith("sqlite"):
+    # SQLite requires check_same_thread=False for development
+    connect_args = {"check_same_thread": False}
+elif not settings.database_url.startswith("sqlite"):
+    # MySQL requires charset specification
     connect_args = {"charset": "utf8mb4"}
 
 engine = create_engine(
