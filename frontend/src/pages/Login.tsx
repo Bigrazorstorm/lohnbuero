@@ -17,9 +17,11 @@ export default function Login() {
     setLoading(true)
     try {
       const tokenRes = await authApi.login(email, password)
-      const meRes = await authApi.me()
       // axios response has .data
       const token = (tokenRes as { data: { access_token: string } }).data.access_token
+      // Store token before calling /me so the request interceptor can attach it
+      useAuthStore.setState({ token })
+      const meRes = await authApi.me()
       const user = (meRes as { data: unknown }).data
       setAuth(token, user as Parameters<typeof setAuth>[1])
       navigate('/dashboard')
