@@ -90,6 +90,7 @@ export interface Mandant {
   fristenprofil_id?: number
   ist_aktiv: boolean
   onboarding_abgeschlossen?: boolean
+  workflow_konfiguration?: { optional_item_ids: number[] }
   sachbearbeiter?: UserShort
   vertretung?: UserShort
   fristenprofil?: Fristenprofil
@@ -333,7 +334,9 @@ export interface WorkflowVorlageItem {
   beschreibung?: string
   verantwortlich_rolle?: UserRole
   faellig_offset_tage: number
+  ist_kernprozess: boolean
   ist_pflicht: boolean
+  ist_optional_pro_mandant: boolean
   erfordert_dokument: boolean
   erfordert_pruefung: boolean
 }

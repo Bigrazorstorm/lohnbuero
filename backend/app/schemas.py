@@ -283,6 +283,7 @@ class MandantBase(BaseModel):
     stundensatz: Optional[float] = None
     monatspauschale: Optional[float] = None
     ist_aktiv: bool = True
+    workflow_konfiguration: Optional[dict] = None  # { "optional_item_ids": [1, 2, 3] }
 
 
 class MandantCreate(MandantBase):
@@ -309,6 +310,7 @@ class MandantUpdate(BaseModel):
     ist_aktiv: Optional[bool] = None
     fristenprofil_id: Optional[int] = None
     aenderung_zum: Optional[datetime] = None
+    workflow_konfiguration: Optional[dict] = None
 
 
 class MandantOut(MandantBase):
@@ -324,6 +326,21 @@ class MandantOut(MandantBase):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @model_validator(mode='before')
+    @classmethod
+    def deserialize_workflow_konfiguration(cls, data):
+        import json
+        if hasattr(data, '__dict__'):
+            # SQLAlchemy model instance
+            wf_konf = data.workflow_konfiguration
+            if wf_konf and isinstance(wf_konf, str):
+                data.workflow_konfiguration = json.loads(wf_konf)
+        elif isinstance(data, dict) and 'workflow_konfiguration' in data:
+            wf_konf = data.get('workflow_konfiguration')
+            if wf_konf and isinstance(wf_konf, str):
+                data['workflow_konfiguration'] = json.loads(wf_konf)
+        return data
 
 
 class MandantShort(BaseModel):
@@ -510,6 +527,7 @@ class WorkflowVorlageItemBase(BaseModel):
     beschreibung: Optional[str] = None
     verantwortlich_rolle: Optional[UserRole] = None
     faellig_offset_tage: int = 0
+    ist_kernprozess: bool = False  # kernel process step (replaces hardcoded fields)
     ist_pflicht: bool = True
     ist_optional_pro_mandant: bool = False
     erfordert_dokument: bool = False

@@ -1,8 +1,8 @@
 import { useState, FormEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
-import { adminApi } from '../api/client'
-import type { User, Branche, AusgabewegConfig, Mandant } from '../types'
+import { adminApi, workflowsApi } from '../api/client'
+import type { User, Branche, AusgabewegConfig, Mandant, WorkflowVorlage, WorkflowVorlageItem } from '../types'
 
 interface Props {
   sachbearbeiterList: User[]
@@ -33,6 +33,11 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
     ...initial,
   })
 
+  // Optional workflow items for this mandant
+  const [selectedOptionalItems, setSelectedOptionalItems] = useState<number[]>(
+    initial?.workflow_konfiguration?.optional_item_ids || []
+  )
+
   // Fetch branchen and ausgabewege from admin API
   const { data: branchen = [] } = useQuery<Branche[]>({
     queryKey: ['branchen'],
@@ -43,6 +48,15 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
     queryKey: ['ausgabewege'],
     queryFn: () => adminApi.listAusgabewege().then(r => r.data).catch(() => []),
   })
+
+  // Fetch all vorlagen to get optional items
+  const { data: vorlagen = [] } = useQuery<WorkflowVorlage[]>({
+    queryKey: ['vorlagen'],
+    queryFn: () => workflowsApi.listVorlagen().then(r => (r as { data: WorkflowVorlage[] }).data).catch(() => []),
+  })
+
+  // Get all items marked as ist_optional_pro_mandant
+  const optionalItems: WorkflowVorlageItem[] = vorlagen.flatMap(v => v.items.filter(i => i.ist_optional_pro_mandant))
 
   const set = (k: string, v: unknown) => setForm((f) => ({ ...f, [k]: v }))
 
@@ -56,6 +70,7 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
       vertretung_id: form.vertretung_id ? Number(form.vertretung_id) : null,
       monatspauschale: form.monatspauschale ? Number(form.monatspauschale) : null,
       aenderung_zum: form.aenderung_zum ? new Date(form.aenderung_zum as string) : null,
+      workflow_konfiguration: selectedOptionalItems.length > 0 ? { optional_item_ids: selectedOptionalItems } : null,
     }
     if (!payload.nummer) delete payload.nummer
     onSubmit(payload)
@@ -176,6 +191,45 @@ export default function MandantForm({ sachbearbeiterList, onSubmit, onClose, loa
               <textarea className="input h-20 resize-none" value={form.besonderheiten as string}
                 onChange={e => set('besonderheiten', e.target.value)} />
             </div>
+
+            {/* Optionale Workflow-Schritte */}
+            {optionalItems.length > 0 && (
+              <div className="col-span-2 border-t pt-4 mt-2">
+                <label className="label">Optionale Workflow-Schritte</label>
+                <p className="text-xs text-gray-500 mb-3">
+                  Wählen Sie zusätzliche Schritte aus, die für diesen Mandanten aktiviert werden sollen
+                </p>
+                <div className="space-y-2 max-h-48 overflow-y-auto border rounded-lg p-3 bg-gray-50">
+                  {optionalItems.map((item) => {
+                    const vorlageName = vorlagen.find(v => v.items.some(i => i.id === item.id))?.name || 'Unbekannt'
+                    return (
+                      <label key={item.id} className="flex items-start gap-2 cursor-pointer hover:bg-white p-1 rounded">
+                        <input
+                          type="checkbox"
+                          checked={selectedOptionalItems.includes(item.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedOptionalItems(prev => [...prev, item.id])
+                            } else {
+                              setSelectedOptionalItems(prev => prev.filter(id => id !== item.id))
+                            }
+                          }}
+                          className="mt-1"
+                        />
+                        <div className="flex-1">
+                          <span className="text-sm font-medium text-gray-800">{item.titel}</span>
+                          <span className="text-xs text-gray-500 ml-2">({vorlageName})</span>
+                          {item.beschreibung && (
+                            <p className="text-xs text-gray-400">{item.beschreibung}</p>
+                          )}
+                        </div>
+                      </label>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
             {isEdit && (
               <div className="col-span-2">
                 <label className="label">Änderung zum (optional)</label>

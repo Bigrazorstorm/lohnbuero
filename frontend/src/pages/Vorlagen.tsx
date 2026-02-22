@@ -16,7 +16,7 @@ export default function Vorlagen() {
     ist_standard: false,
   })
   const [items, setItems] = useState([
-    { position: 1, titel: '', beschreibung: '', faellig_offset_tage: 0, ist_pflicht: true, erfordert_dokument: false, erfordert_pruefung: false }
+    { position: 1, titel: '', beschreibung: '', faellig_offset_tage: 0, ist_kernprozess: false, ist_pflicht: true, ist_optional_pro_mandant: false, erfordert_dokument: false, erfordert_pruefung: false }
   ])
 
   const { data: vorlagen = [], isLoading } = useQuery<WorkflowVorlage[]>({
@@ -36,7 +36,7 @@ export default function Vorlagen() {
 
   const addItem = () => setItems(prev => [
     ...prev,
-    { position: prev.length + 1, titel: '', beschreibung: '', faellig_offset_tage: prev.length * 3, ist_pflicht: true, erfordert_dokument: false, erfordert_pruefung: false }
+    { position: prev.length + 1, titel: '', beschreibung: '', faellig_offset_tage: prev.length * 3, ist_kernprozess: false, ist_pflicht: true, ist_optional_pro_mandant: false, erfordert_dokument: false, erfordert_pruefung: false }
   ])
 
   const removeItem = (idx: number) => setItems(prev => prev.filter((_, i) => i !== idx).map((it, i) => ({ ...it, position: i + 1 })))
@@ -99,15 +99,26 @@ export default function Vorlagen() {
                 <Plus size={12} /> Schritt hinzufügen
               </button>
             </div>
+            {/* Column headers */}
+            <div className="grid grid-cols-13 gap-2 px-3 pb-2 text-[10px] text-gray-500 font-medium">
+              <div className="col-span-1 text-center">Nr.</div>
+              <div className="col-span-3">Titel</div>
+              <div className="col-span-2">Beschreibung</div>
+              <div className="col-span-2">Fällig</div>
+              <div className="col-span-1 text-center">Kern</div>
+              <div className="col-span-1 text-center">Mand.</div>
+              <div className="col-span-1 text-center">Pflicht</div>
+              <div className="col-span-1"></div>
+            </div>
             <div className="space-y-2">
               {items.map((item, idx) => (
-                <div key={idx} className="grid grid-cols-12 gap-2 items-center p-3 bg-gray-50 rounded-lg">
+                <div key={idx} className="grid grid-cols-13 gap-2 items-center p-3 bg-gray-50 rounded-lg">
                   <div className="col-span-1 text-center text-xs text-gray-400 font-mono">{item.position}</div>
-                  <div className="col-span-4">
+                  <div className="col-span-3">
                     <input className="input text-xs" placeholder="Titel *" value={item.titel}
                       onChange={e => updateItem(idx, 'titel', e.target.value)} />
                   </div>
-                  <div className="col-span-3">
+                  <div className="col-span-2">
                     <input className="input text-xs" placeholder="Beschreibung" value={item.beschreibung}
                       onChange={e => updateItem(idx, 'beschreibung', e.target.value)} />
                   </div>
@@ -118,8 +129,17 @@ export default function Vorlagen() {
                       <span className="text-xs text-gray-400">Tage</span>
                     </div>
                   </div>
-                  <div className="col-span-1 flex gap-1">
-                    <label title="Pflicht"><input type="checkbox" checked={item.ist_pflicht} onChange={e => updateItem(idx, 'ist_pflicht', e.target.checked)} /></label>
+                  <div className="col-span-1 flex flex-col items-center">
+                    <input type="checkbox" checked={item.ist_kernprozess} onChange={e => updateItem(idx, 'ist_kernprozess', e.target.checked)} id={`kern-${idx}`} />
+                    <label htmlFor={`kern-${idx}`} className="text-[10px] text-amber-600 cursor-pointer">Kern</label>
+                  </div>
+                  <div className="col-span-1 flex flex-col items-center">
+                    <input type="checkbox" checked={item.ist_optional_pro_mandant} onChange={e => updateItem(idx, 'ist_optional_pro_mandant', e.target.checked)} id={`opt-${idx}`} />
+                    <label htmlFor={`opt-${idx}`} className="text-[10px] text-gray-500 cursor-pointer">Mand.</label>
+                  </div>
+                  <div className="col-span-1 flex flex-col items-center">
+                    <input type="checkbox" checked={item.ist_pflicht} onChange={e => updateItem(idx, 'ist_pflicht', e.target.checked)} id={`pfl-${idx}`} />
+                    <label htmlFor={`pfl-${idx}`} className="text-[10px] text-gray-500 cursor-pointer">Pflicht</label>
                   </div>
                   <div className="col-span-1 text-right">
                     <button onClick={() => removeItem(idx)} className="text-red-400 hover:text-red-600">
@@ -177,6 +197,8 @@ export default function Vorlagen() {
                       </span>
                       <span className="flex-1 text-gray-800">{item.titel}</span>
                       <span className="text-xs text-gray-400">+{item.faellig_offset_tage} Tage</span>
+                      {item.ist_kernprozess && <span className="badge bg-amber-100 text-amber-700 text-xs">Kernprozess</span>}
+                      {item.ist_optional_pro_mandant && <span className="badge bg-blue-100 text-blue-700 text-xs">Mandanten-Option</span>}
                       {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
                       {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
                     </div>

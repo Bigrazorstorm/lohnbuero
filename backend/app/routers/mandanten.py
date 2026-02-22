@@ -54,12 +54,19 @@ def create_mandant(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_teamleitung),
 ):
+    import json
+
     if data.nummer:
         existing = db.query(Mandant).filter(Mandant.nummer == data.nummer).first()
         if existing:
             raise HTTPException(status_code=400, detail="Mandantennummer bereits vorhanden")
 
-    mandant = Mandant(**data.model_dump())
+    mandant_data = data.model_dump()
+    # JSON-Feld korrekt serialisieren
+    if mandant_data.get('workflow_konfiguration') is not None:
+        mandant_data['workflow_konfiguration'] = json.dumps(mandant_data['workflow_konfiguration'])
+
+    mandant = Mandant(**mandant_data)
     db.add(mandant)
     db.flush()
 
@@ -150,6 +157,10 @@ def update_mandant(
     else:
         # Sofortige Änderung
         old_vals = {k: getattr(mandant, k) for k in update_data}
+
+        # JSON-Felder korrekt serialisieren
+        if 'workflow_konfiguration' in update_data and update_data['workflow_konfiguration'] is not None:
+            update_data['workflow_konfiguration'] = json.dumps(update_data['workflow_konfiguration'])
 
         for k, v in update_data.items():
             setattr(mandant, k, v)

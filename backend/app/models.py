@@ -202,6 +202,10 @@ class Mandant(Base):
     onboarding_abgeschlossen = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
+    # Workflow-Konfiguration: optionale Vorlagen-Items pro Mandant
+    # JSON: { "vorlage_item_ids": [1, 2, 3] } - IDs der optionalen Items die aktiviert werden sollen
+    workflow_konfiguration = Column(Text, nullable=True)
+
     # Relationships
     sachbearbeiter = relationship("User", back_populates="mandanten_als_sachbearbeiter", foreign_keys=[sachbearbeiter_id])
     vertretung = relationship("User", back_populates="mandanten_als_vertretung", foreign_keys=[vertretung_id])
@@ -370,6 +374,7 @@ class WorkflowVorlageItem(Base):
     beschreibung = Column(Text)
     verantwortlich_rolle = Column(Enum(UserRole))
     faellig_offset_tage = Column(Integer, default=0)  # days after month start
+    ist_kernprozess = Column(Boolean, default=False)  # kernel process step (replaces hardcoded fields)
     ist_pflicht = Column(Boolean, default=True)
     ist_optional_pro_mandant = Column(Boolean, default=False)  # can be activated per mandant
     erfordert_dokument = Column(Boolean, default=False)
