@@ -393,7 +393,7 @@ def _update_ampel(db: Session, instanz_id: int):
         Ticket.mandant_id == instanz.mandant_id,
         Ticket.workflow_instanz_id == instanz_id,
         Ticket.prioritaet == TicketPrioritaet.KRITISCH,
-        Ticket.status.in_(OPEN_STATUSES)
+        Ticket.status.in_(_OPEN_TICKET_STATUSES)
     ).count() > 0
 
     if overdue or critical_tickets:
