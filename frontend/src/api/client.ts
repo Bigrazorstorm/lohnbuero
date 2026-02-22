@@ -83,6 +83,7 @@ export const ticketsApi = {
 export const dashboardApi = {
   stats: () => api.get('/dashboard/stats'),
   ampel: () => api.get('/dashboard/ampel'),
+  meinTag: () => api.get('/dashboard/mein-tag'),
 }
 
 // ── Dokumente ─────────────────────────────────

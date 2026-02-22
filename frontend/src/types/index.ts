@@ -265,6 +265,52 @@ export interface MandantAmpelInfo {
   sachbearbeiter?: UserShort
 }
 
+// ── Dashboard "Mein Tag" Sections ───────────────────────────
+export interface KritischInfo {
+  mandant_id: number
+  mandant_name: string
+  mandant_kategorie: MandantKategorie
+  workflow_id: number
+  monat: number
+  jahr: number
+  naechster_stichtag?: string
+  stichtag_typ?: string
+  ampelstatus: Ampelstatus
+  sachbearbeiter?: UserShort
+  blocker?: string
+}
+
+export interface WartetAufMandantInfo {
+  mandant_id: number
+  mandant_name: string
+  workflow_id: number
+  monat: number
+  jahr: number
+  ticket_id?: number
+  ticket_titel?: string
+  sachbearbeiter?: UserShort
+  wartet_seit?: string
+}
+
+export interface MeineArbeitItem {
+  typ: 'workflow_schritt' | 'sonderaufgabe'
+  id: number
+  titel: string
+  mandant_id: number
+  mandant_name: string
+  monat?: number
+  jahr?: number
+  faellig_datum?: string
+  punkte?: number
+  prioritaet?: 'kritisch' | 'hoch' | 'normal'
+}
+
+export interface DashboardMeinTag {
+  kritisch: KritischInfo[]
+  wartet_auf_mandant: WartetAufMandantInfo[]
+  meine_arbeit: MeineArbeitItem[]
+}
+
 export interface WorkflowVorlageItem {
   id: number
   vorlage_id: number

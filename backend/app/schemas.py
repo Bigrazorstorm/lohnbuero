@@ -912,6 +912,63 @@ class MandantAmpelInfo(BaseModel):
 
 
 # ─────────────────────────────────────────
+# Dashboard "Mein Tag" Sections
+# ─────────────────────────────────────────
+
+class KritischInfo(BaseModel):
+    mandant_id: int
+    mandant_name: str
+    mandant_kategorie: MandantKategorie
+    workflow_id: int
+    monat: int
+    jahr: int
+    naechster_stichtag: Optional[str] = None
+    stichtag_typ: Optional[str] = None
+    ampelstatus: Ampelstatus
+    sachbearbeiter: Optional[UserShort] = None
+    blocker: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class WartetAufMandantInfo(BaseModel):
+    mandant_id: int
+    mandant_name: str
+    workflow_id: int
+    monat: int
+    jahr: int
+    ticket_id: Optional[int] = None
+    ticket_titel: Optional[str] = None
+    sachbearbeiter: Optional[UserShort] = None
+    wartet_seit: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class MeineArbeitItem(BaseModel):
+    typ: str  # 'workflow_schritt' or 'sonderaufgabe'
+    id: int
+    titel: str
+    mandant_id: int
+    mandant_name: str
+    monat: Optional[int] = None
+    jahr: Optional[int] = None
+    faellig_datum: Optional[str] = None
+    punkte: Optional[float] = None
+    prioritaet: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class DashboardMeinTag(BaseModel):
+    kritisch: List[KritischInfo] = []
+    wartet_auf_mandant: List[WartetAufMandantInfo] = []
+    meine_arbeit: List[MeineArbeitItem] = []
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
 # FristenVorlage (Default Deadline Templates)
 # ─────────────────────────────────────────
 
