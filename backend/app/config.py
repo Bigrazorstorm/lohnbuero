@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     algorithm: str = "HS256"
     access_token_expire_minutes: int = 480  # 8 hours
 
-    database_url: str = "sqlite:///./aom.db"
+    database_url: str = "mysql+pymysql://lohnbuero:lohnbuero123@mysql:3306/lohnbuero"
 
     model_config = {"env_file": ".env"}
 

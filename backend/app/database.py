@@ -4,9 +4,14 @@ from sqlalchemy.orm import sessionmaker
 
 from app.config import settings
 
+# MySQL requires pymysql driver and doesn't need check_same_thread
+connect_args = {}
+if not settings.database_url.startswith("sqlite"):
+    connect_args = {"charset": "utf8mb4"}
+
 engine = create_engine(
     settings.database_url,
-    connect_args={"check_same_thread": False},
+    connect_args=connect_args,
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
