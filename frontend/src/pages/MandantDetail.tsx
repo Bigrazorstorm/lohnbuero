@@ -9,6 +9,7 @@ import { mandantenApi, workflowsApi, usersApi } from '../api/client'
 import type { Mandant, WorkflowInstanzShort } from '../types'
 import { KategorieBadge, WorkflowStatusBadge } from '../components/StatusBadge'
 import Ampel from '../components/Ampel'
+import MandantForm from './MandantForm'
 
 export default function MandantDetail() {
   const { id } = useParams<{ id: string }>()
