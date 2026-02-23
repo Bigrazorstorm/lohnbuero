@@ -154,6 +154,8 @@ export interface WorkflowItem {
   blockiert_von_item_ids?: number[] // NEW (v2.1): List of blocking item IDs
   blockiert_grund?: string // NEW (v2.1): Reason for blockage
   blockierung_seit?: string // NEW (v2.1): When blockage started
+  herkunft?: WorkflowItemHerkunft // Origin information
+  ebene?: WorkflowSchrittEbene // Hierarchy level
   punkte?: number
 }
 
@@ -162,12 +164,14 @@ export interface WorkflowInstanz {
   mandant_id: number
   mandant?: { id: number; name: string; nummer?: string; kategorie: MandantKategorie; ist_aktiv: boolean }
   vorlage_id?: number
+  vorlage?: WorkflowVorlage
   monat: number
   jahr: number
   status: WorkflowStatus
   ampelstatus: Ampelstatus
   sachbearbeiter?: UserShort
   pruefer?: UserShort
+  sla_deadline?: string
   unterlagen_eingegangen_am?: string
   unterlagen_eingegangen_von?: UserShort
   unterlagen_faellig?: string
@@ -600,7 +604,9 @@ export interface Tenant {
   code: string
   beschreibung?: string
   logo_url?: string
+  branding_logo_url?: string
   primaerfarbe?: string
+  branding_primary_color?: string
   konfiguration?: string
   ist_aktiv: boolean
   created_at: string
@@ -616,10 +622,12 @@ export interface Abrechnungsfirma {
   strasse?: string
   plz?: string
   ort?: string
+  stadt?: string
   land: string
   telefon?: string
   email?: string
   steuernummer?: string
+  steuer_id?: string
   ustid?: string
   bank_name?: string
   iban?: string
@@ -719,6 +727,7 @@ export interface WorkflowItemHerkunft {
   branchen_schritt_id?: number
   mandant_schritt_id?: number
   global_event_schritt_id?: number
+  source_name?: string
   created_at: string
 }
 

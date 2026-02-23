@@ -30,10 +30,8 @@ export function AdminBranchenSchritte() {
     setLoading(true)
     try {
       const [scritte, branches] = await Promise.all([
-        adminApi.listBranchenWorkflowSchritte({
-          branche_id: filterBranche || undefined,
-        }),
-        adminApi.listBranches?.() || Promise.resolve({ data: [] }),
+        adminApi.listBranchenWorkflowSchritte(filterBranche || 0, false),
+        adminApi.listBranchen?.() || Promise.resolve({ data: [] }),
       ])
       setBranchenSchritte(scritte.data)
       setBranches(branches.data)
@@ -307,7 +305,7 @@ export function AdminBranchenSchritte() {
                   >
                     <div className="flex-1">
                       <p className="font-medium">
-                        {schritt.position}. Schritt {schritt.schritt_typ_id}
+                        {schritt.position}. Schritt {schritt.schritttyp}
                       </p>
                       {schritt.beschreibung && (
                         <p className="text-sm text-gray-600 mt-1">

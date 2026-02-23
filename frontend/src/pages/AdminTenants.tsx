@@ -38,12 +38,22 @@ export function AdminTenants() {
   const loadData = async () => {
     setLoading(true)
     try {
-      const [tenants, abrech] = await Promise.all([
-        adminApi.listTenants?.() || Promise.resolve({ data: [] }),
-        adminApi.listAbrechnungsfirmen?.() || Promise.resolve({ data: [] }),
-      ])
+      const tenants = await adminApi.listTenants?.(false) || Promise.resolve({ data: [] })
       setTenants(tenants.data)
-      setAbrechnungsfirmen(abrech.data)
+      
+      // Load abrechnungsfirmen for each tenant
+      const allAbrech: any[] = []
+      for (const tenant of tenants.data) {
+        try {
+          const abrech = await adminApi.listAbrechnungsfirmen?.(tenant.id, false)
+          if (abrech?.data) {
+            allAbrech.push(...abrech.data)
+          }
+        } catch (error) {
+          console.error(`Fehler beim Laden von Abrechnungsfirmen für Tenant ${tenant.id}:`, error)
+        }
+      }
+      setAbrechnungsfirmen(allAbrech)
     } catch (error) {
       console.error('Fehler beim Laden der Daten:', error)
     } finally {

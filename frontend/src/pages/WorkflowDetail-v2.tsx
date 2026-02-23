@@ -6,7 +6,7 @@ import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import toast from 'react-hot-toast'
 import { workflowsApi } from '../api/client'
-import type { WorkflowInstanz, ChecklistItemStatus, WorkflowPhase, WorkflowItem } from '../types'
+import type { WorkflowInstanz, ChecklistItemStatus, WorkflowPhase, WorkflowItem, BlockedItemSummary } from '../types'
 import Ampel from '../components/Ampel'
 import { WorkflowStatusBadge } from '../components/StatusBadge'
 import PhaseAccordion from '../components/PhaseAccordion'
@@ -72,7 +72,7 @@ export default function WorkflowDetail() {
   const phases: WorkflowPhase[] = []
 
   if (wf.vorlage?.phasen) {
-    wf.vorlage.phasen.forEach((phase) => {
+    wf.vorlage.phasen.forEach((phase: WorkflowPhase) => {
       phases.push(phase)
       itemsByPhase[phase.id] = wf.items.filter((item) => item.phase_id === phase.id)
     })
@@ -129,7 +129,7 @@ export default function WorkflowDetail() {
             <div>
               <h3 className="font-bold text-red-700 mb-2">⚠️ {blockedItems.length} blockierte Items</h3>
               <ul className="space-y-1 text-sm text-red-600">
-                {blockedItems.slice(0, 3).map((item) => (
+                {blockedItems.slice(0, 3).map((item: BlockedItemSummary) => (
                   <li key={item.id}>• {item.titel}</li>
                 ))}
                 {blockedItems.length > 3 && <li className="text-red-600">+ {blockedItems.length - 3} weitere…</li>}
@@ -140,12 +140,12 @@ export default function WorkflowDetail() {
       )}
 
       {/* Progress Display - 3-tier */}
-      <ProgressDisplay items={wf.items} phases={wf.vorlage?.phasen} />
+      <ProgressDisplay items={wf.items} phases={wf.vorlage?.phasen || []} />
 
       {/* Phase Accordions */}
       <div>
         <h2 className="text-xl font-bold mb-4 px-6">Workflow-Schritte</h2>
-        {phases.map((phase) => (
+        {phases.map((phase: WorkflowPhase) => (
           <PhaseAccordion
             key={phase.id}
             phase={phase}

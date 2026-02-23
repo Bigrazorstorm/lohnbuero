@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { WorkflowPhase, WorkflowItem, ChecklistItemStatus } from '../types'
+import { WorkflowPhase, WorkflowItem, ChecklistItemStatus, WorkflowItemStatus } from '../types'
 
 interface PhaseAccordionProps {
   phase: WorkflowPhase
@@ -22,7 +22,7 @@ export default function PhaseAccordion({
   const blocked = items.filter((i) => i.status === 'blockiert' || (i.blockiert_von_item_ids && i.blockiert_von_item_ids.length > 0)).length
   const progress = total > 0 ? Math.round((completed / total) * 100) : 0
 
-  const statusColor = (status: ChecklistItemStatus): string => {
+  const statusColor = (status: ChecklistItemStatus | WorkflowItemStatus): string => {
     switch (status) {
       case 'erledigt':
         return 'bg-green-50 border-green-200'
@@ -37,7 +37,7 @@ export default function PhaseAccordion({
     }
   }
 
-  const statusIcon = (status: ChecklistItemStatus | undefined): string => {
+  const statusIcon = (status: ChecklistItemStatus | WorkflowItemStatus | undefined): string => {
     switch (status) {
       case 'erledigt':
         return '✅'
