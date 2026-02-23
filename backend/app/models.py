@@ -275,8 +275,15 @@ class Branche(Base):
     # { "requiresAuditTrail": true, "requiresSignature": false, ... }
     konfiguration = Column(Text, nullable=True)
     
+    # Admin Stammdaten fields
+    faktor = Column(Float, default=1.0)               # Punkte-/Komplexitätsfaktor
+    soka_relevant = Column(Boolean, default=False)     # SOKA-Relevanz
+    tags = Column(Text, nullable=True)                 # JSON-encoded list of tags
+    
     ist_aktiv = Column(Boolean, default=True)
+    ist_archiviert = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
     mandanten = relationship("Mandant", secondary=mandant_branchen, back_populates="branchen_liste")
@@ -861,26 +868,6 @@ class EmailLog(Base):
 
     template = relationship("EmailTemplate", back_populates="logs")
     mandant = relationship("Mandant", back_populates="email_logs")
-
-
-# ─────────────────────────────────────────
-# Branche (Admin Stammdaten)
-# ─────────────────────────────────────────
-
-class Branche(Base):
-    __tablename__ = "branchen"
-
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False, unique=True)
-    beschreibung = Column(Text, nullable=True)
-    faktor = Column(Float, default=1.0)               # Punkte-/Komplexitätsfaktor
-    soka_relevant = Column(Boolean, default=False)     # SOKA-Relevanz
-    tags = Column(Text, nullable=True)                 # JSON-encoded list of tags
-    ist_archiviert = Column(Boolean, default=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    mandanten = relationship("Mandant", secondary=mandant_branchen, back_populates="branchen_liste")
 
 
 # ─────────────────────────────────────────

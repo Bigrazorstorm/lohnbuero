@@ -21,7 +21,7 @@ services:
   backend:
     build: ./backend
     ports:
-      - "8001:8000"
+      - "8050:8050"
     volumes:
       - ./backend:/app
       - uploads:/app/uploads
@@ -30,7 +30,7 @@ services:
     command: >
       sh -c "pip install -r requirements.txt -q &&
              python migrate.py &&
-             uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
+             uvicorn app.main:app --host 0.0.0.0 --port 8050 --reload"
     depends_on:
       mysql:
         condition: service_healthy
@@ -41,7 +41,7 @@ services:
       - "5173:5173"
     environment:
       - PORT=5173
-      - BACKEND_URL=http://backend:8000
+      - BACKEND_URL=http://backend:8050
     depends_on:
       - backend
 
