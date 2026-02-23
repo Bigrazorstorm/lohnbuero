@@ -29,7 +29,6 @@ services:
       - DATABASE_URL=mysql+pymysql://lohnbuero:lohnbuero123@mysql:3306/lohnbuero
     command: >
       sh -c "pip install -r requirements.txt -q &&
-             python seed.py &&
              python migrate.py &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     depends_on:

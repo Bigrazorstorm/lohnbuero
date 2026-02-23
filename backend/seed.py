@@ -5,12 +5,10 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from datetime import datetime, timedelta
 from app.database import SessionLocal, engine
-from app.models import Base, User, UserRole, Mandant, MandantKategorie, Abgabeweg
+from app.models import User, UserRole, Mandant, MandantKategorie, Abgabeweg
 from app.models import WorkflowVorlage, WorkflowVorlageItem, WorkflowInstanz, WorkflowItem
 from app.models import Ticket, TicketPrioritaet, TicketStatus, WorkflowStatus, Ampelstatus
 from app.auth import get_password_hash
-
-Base.metadata.create_all(bind=engine)
 
 
 def seed(db=None):
