@@ -7,7 +7,8 @@ from sqlalchemy.orm import Session
 from app.models import (
     AusgabewegConfig, Branche, EmailTemplate, FristenVorlage,
     SmtpKonfiguration, SystemDefault, UploadKonfiguration,
-    WorkflowSchrittTyp, PunkteKonfiguration,
+    WorkflowSchrittTypConfig, PunkteKonfiguration, GlobalEvent, GlobalEventSchritt,
+    GlobalEventTyp, Tenant, WorkflowSchrittTyp,
 )
 
 
@@ -250,6 +251,73 @@ DEFAULT_PUNKTE_KONFIGURATION = {
     }),
 }
 
+# ─────────────────────────────────────────
+# Example Global Events (Jahreswechsel, etc.)
+# ─────────────────────────────────────────
+
+EXAMPLE_GLOBAL_EVENTS = [
+    {
+        "name": "Jahreswechsel 2026/2027",
+        "typ": GlobalEventTyp.JAHRESWECHSEL,
+        "gueltig_von": datetime(2026, 12, 1),
+        "gueltig_bis": datetime(2027, 2, 28),
+        "betroffene_monate": json.dumps([
+            {"monat": 12, "jahr": 2026},
+            {"monat": 1, "jahr": 2027},
+        ]),
+        "mandanten_filter": json.dumps({"alle": True}),  # Applies to all mandants
+        "prioritaet": 10,
+        "schritte": [
+            {
+                "position": 1,
+                "titel": "Jahreswechsel-Checkliste durcharbeiten",
+                "beschreibung": "Durchgehen Sie die Jahreswechsel-Checkliste und aktualisieren Sie alle erforderlichen Daten.",
+                "anleitung": "https://wiki.example.com/jahreswechsel-2027",
+                "ist_pflicht": True,
+                "faellig_offset_tage": 5,
+                "standard_punkte": 2.0,
+            },
+            {
+                "position": 2,
+                "titel": "SV-Werte aktualisieren (RV, KV, PV)",
+                "beschreibung": "Aktualisieren Sie die aktuellen Sozialversicherungswerte für 2027.",
+                "ist_pflicht": True,
+                "faellig_offset_tage": 3,
+                "standard_punkte": 1.5,
+            },
+            {
+                "position": 3,
+                "titel": "Lohnsteuer-Tarifet aktualisieren",
+                "beschreibung": "Die neuen Lohnsteuer-Tariffreibeträge müssen in der Lohnabrechnung hinterlegt werden.",
+                "ist_pflicht": True,
+                "faellig_offset_tage": 2,
+                "standard_punkte": 1.0,
+            },
+        ]
+    },
+    {
+        "name": "Mindestlohn-Erhöhung 2027",
+        "typ": GlobalEventTyp.MINDESTLOHN_ERHOEHUNG,
+        "gueltig_von": datetime(2027, 1, 1),
+        "gueltig_bis": datetime(2027, 2, 28),
+        "betroffene_monate": json.dumps([{"monat": 1, "jahr": 2027}]),
+        "mandanten_filter": json.dumps({"kategorien": ["B", "C"]}),  # Small & medium companies
+        "prioritaet": 5,
+        "schritte": [
+            {
+                "position": 1,
+                "titel": "Mindestlohn-Anpassung durchführen",
+                "beschreibung": "Passen Sie Gehälter zum neuen Mindestlohn an (€ 12,41 ab Januar 2027).",
+                "ist_pflicht": True,
+                "faellig_offset_tage": 1,
+                "erfordert_pruefung": True,
+                "standard_punkte": 1.5,
+            },
+        ]
+    },
+]
+
+
 SYSTEM_DEFAULT_CONFIGS = [
     {"bereich": "branchen", "name": "Basis-Branchenliste", "konfiguration": json.dumps({"count": len(DEFAULT_BRANCHEN), "source": "system"})},
     {"bereich": "ausgabewege", "name": "Basis-Ausgabewege", "konfiguration": json.dumps({"count": len(DEFAULT_AUSGABEWEGE), "source": "system"})},
@@ -310,9 +378,9 @@ def seed_defaults_for_bereich(db: Session, bereich: str):
 
     elif bereich == "workflow_schritte":
         for st in DEFAULT_WORKFLOW_SCHRITT_TYPEN:
-            existing = db.query(WorkflowSchrittTyp).filter(WorkflowSchrittTyp.name == st["name"]).first()
+            existing = db.query(WorkflowSchrittTypConfig).filter(WorkflowSchrittTypConfig.name == st["name"]).first()
             if not existing:
-                db.add(WorkflowSchrittTyp(**st))
+                db.add(WorkflowSchrittTypConfig(**st))
 
     elif bereich == "punkte":
         existing = db.query(PunkteKonfiguration).filter(PunkteKonfiguration.name == DEFAULT_PUNKTE_KONFIGURATION["name"]).first()
@@ -359,9 +427,9 @@ def seed_all_defaults(db: Session):
 
     # Workflow-Schritt-Typen
     for st in DEFAULT_WORKFLOW_SCHRITT_TYPEN:
-        existing = db.query(WorkflowSchrittTyp).filter(WorkflowSchrittTyp.name == st["name"]).first()
+        existing = db.query(WorkflowSchrittTypConfig).filter(WorkflowSchrittTypConfig.name == st["name"]).first()
         if not existing:
-            db.add(WorkflowSchrittTyp(**st))
+            db.add(WorkflowSchrittTypConfig(**st))
 
     # Punkte-Konfiguration
     existing = db.query(PunkteKonfiguration).filter(PunkteKonfiguration.name == DEFAULT_PUNKTE_KONFIGURATION["name"]).first()
@@ -380,3 +448,30 @@ def seed_all_defaults(db: Session):
     # Upload config
     if db.query(UploadKonfiguration).count() == 0:
         db.add(UploadKonfiguration())
+    
+    # Example Global Events (only seed if none exist)
+    if db.query(GlobalEvent).count() == 0:
+        # Create default tenant if needed
+        default_tenant = db.query(Tenant).filter(Tenant.code == "default").first()
+        if not default_tenant:
+            default_tenant = Tenant(name="Standard", code="default", ist_aktiv=True)
+            db.add(default_tenant)
+            db.flush()
+        
+        for event_data in EXAMPLE_GLOBAL_EVENTS:
+            schritte_data = event_data.pop("schritte", [])
+            event = GlobalEvent(
+                **event_data,
+                tenant_id=default_tenant.id,
+                ist_aktiv=False,  # Disabled by default - enable as needed
+            )
+            db.add(event)
+            db.flush()
+            
+            for schritt_data in schritte_data:
+                schritt = GlobalEventSchritt(
+                    event_id=event.id,
+                    schritttyp=WorkflowSchrittTyp.VERARBEITUNG,
+                    **schritt_data
+                )
+                db.add(schritt)

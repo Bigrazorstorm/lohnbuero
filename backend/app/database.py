@@ -181,4 +181,20 @@ def run_migrations():
         if "benutzer_id" not in audit_cols:
             conn.execute(text("ALTER TABLE audit_logs ADD COLUMN benutzer_id INTEGER"))
 
+        # ═══════════════════════════════════════════════════════════════
+        # v2.0 - Multi-Tenant und Workflow-Erweiterungen
+        # ═══════════════════════════════════════════════════════════════
+        
+        # users – tenant_id für Multi-Tenancy
+        user_cols = {col['name'] for col in inspector.get_columns('users')}
+        if "tenant_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN tenant_id INTEGER"))
+        
+        # mandanten – tenant_id und abrechnungsfirma_id
+        mandant_cols = {col['name'] for col in inspector.get_columns('mandanten')}
+        if "tenant_id" not in mandant_cols:
+            conn.execute(text("ALTER TABLE mandanten ADD COLUMN tenant_id INTEGER"))
+        if "abrechnungsfirma_id" not in mandant_cols:
+            conn.execute(text("ALTER TABLE mandanten ADD COLUMN abrechnungsfirma_id INTEGER"))
+
         conn.commit()

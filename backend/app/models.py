@@ -21,6 +21,14 @@ mandant_branchen = Table(
     Column("branche_id", Integer, ForeignKey("branchen.id"), primary_key=True),
 )
 
+# Association table für globale Events zu Workflow-Instanzen
+workflow_instanz_global_events = Table(
+    "workflow_instanz_global_events",
+    Base.metadata,
+    Column("workflow_instanz_id", Integer, ForeignKey("workflow_instanzen.id"), primary_key=True),
+    Column("global_event_id", Integer, ForeignKey("global_events.id"), primary_key=True),
+)
+
 
 # ─────────────────────────────────────────
 # Enums
@@ -153,6 +161,103 @@ class AmpelRegelTyp(str, enum.Enum):
     BLOCKIERT = "blockiert"  # blocked by dependency
 
 
+class GlobalEventTyp(str, enum.Enum):
+    JAHRESWECHSEL = "jahreswechsel"
+    MINDESTLOHN_ERHOEHUNG = "mindestlohn_erhoehung"
+    GESETZESAENDERUNG = "gesetzesaenderung"
+    SV_WERTE_AENDERUNG = "sv_werte_aenderung"
+    STEUERAENDERUNG = "steueraenderung"
+    KURZARBEIT = "kurzarbeit"
+    CORONA_MASSNAHME = "corona_massnahme"
+    SONSTIG = "sonstig"
+
+
+class WorkflowSchrittEbene(str, enum.Enum):
+    STANDARD = "standard"           # Teil des Standard-Workflows
+    BRANCHE = "branche"             # Branchenspezifisch
+    MANDANT = "mandant"             # Mandantenspezifisch
+    GLOBAL_EVENT = "global_event"   # Globales Event (z.B. Jahreswechsel)
+
+
+# ─────────────────────────────────────────
+# Tenant (Multi-Tenancy-Unterstützung)
+# ─────────────────────────────────────────
+
+class Tenant(Base):
+    """
+    Multi-Tenant-Unterstützung: Ein Tenant repräsentiert eine Organisation/Kanzlei,
+    die mehrere Abrechnungsfirmen haben kann.
+    """
+    __tablename__ = "tenants"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False, unique=True)
+    code = Column(String(50), nullable=False, unique=True)  # Kurzcode für URLs etc.
+    beschreibung = Column(Text, nullable=True)
+    
+    # Konfiguration (JSON)
+    # { "features": ["multi_abrechnungsfirma"], "max_mandanten": 1000, ... }
+    konfiguration = Column(Text, nullable=True)
+    
+    # Branding
+    logo_url = Column(String(500), nullable=True)
+    primaerfarbe = Column(String(7), nullable=True)  # Hex-Farbe, z.B. "#003366"
+    
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    abrechnungsfirmen = relationship("Abrechnungsfirma", back_populates="tenant", cascade="all, delete-orphan")
+    users = relationship("User", back_populates="tenant")
+
+
+class Abrechnungsfirma(Base):
+    """
+    Eine Abrechnungsfirma innerhalb eines Tenants.
+    Mandanten werden einer Abrechnungsfirma zugeordnet.
+    """
+    __tablename__ = "abrechnungsfirmen"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=False)
+    
+    name = Column(String(255), nullable=False)
+    code = Column(String(50), nullable=False)  # Kurzcode innerhalb des Tenants
+    beschreibung = Column(Text, nullable=True)
+    
+    # Adressdaten
+    strasse = Column(String(255), nullable=True)
+    plz = Column(String(10), nullable=True)
+    ort = Column(String(100), nullable=True)
+    land = Column(String(100), default="Deutschland")
+    
+    # Kontaktdaten
+    telefon = Column(String(50), nullable=True)
+    email = Column(String(255), nullable=True)
+    
+    # Steuerliche Daten
+    steuernummer = Column(String(50), nullable=True)
+    ustid = Column(String(50), nullable=True)
+    
+    # Bankverbindung
+    bank_name = Column(String(255), nullable=True)
+    iban = Column(String(34), nullable=True)
+    bic = Column(String(11), nullable=True)
+    
+    # Spezielle Workflow-Konfiguration für diese Firma
+    # JSON: { "standard_vorlage_id": 1, "default_sla_tage": 10 }
+    workflow_konfiguration = Column(Text, nullable=True)
+    
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    tenant = relationship("Tenant", back_populates="abrechnungsfirmen")
+    mandanten = relationship("Mandant", back_populates="abrechnungsfirma")
+
+
 # ─────────────────────────────────────────
 # User
 # ─────────────────────────────────────────
@@ -161,6 +266,7 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True)  # Multi-Tenant
     email = Column(String(255), unique=True, index=True, nullable=False)
     full_name = Column(String(255), nullable=False)
     hashed_password = Column(String(255), nullable=False)
@@ -174,6 +280,7 @@ class User(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     # Relationships
+    tenant = relationship("Tenant", back_populates="users")
     mandanten_als_sachbearbeiter = relationship(
         "Mandant", back_populates="sachbearbeiter", foreign_keys="Mandant.sachbearbeiter_id"
     )
@@ -201,6 +308,8 @@ class Mandant(Base):
     __tablename__ = "mandanten"
 
     id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True)  # Multi-Tenant
+    abrechnungsfirma_id = Column(Integer, ForeignKey("abrechnungsfirmen.id"), nullable=True)
     nummer = Column(String(50), unique=True, index=True)
     name = Column(String(255), nullable=False, index=True)
     branche = Column(String(100))
@@ -237,6 +346,8 @@ class Mandant(Base):
     workflow_konfiguration = Column(Text, nullable=True)
 
     # Relationships
+    tenant = relationship("Tenant", foreign_keys=[tenant_id])
+    abrechnungsfirma = relationship("Abrechnungsfirma", back_populates="mandanten", foreign_keys=[abrechnungsfirma_id])
     sachbearbeiter = relationship("User", back_populates="mandanten_als_sachbearbeiter", foreign_keys=[sachbearbeiter_id])
     vertretung = relationship("User", back_populates="mandanten_als_vertretung", foreign_keys=[vertretung_id])
     portal_user = relationship("User", back_populates="mandant_portal", foreign_keys=[portal_user_id])
@@ -615,6 +726,7 @@ class WorkflowInstanz(Base):
     tickets = relationship("Ticket", back_populates="workflow_instanz")
     dokumente = relationship("Dokument", back_populates="workflow_instanz")
     eskalationen = relationship("EskalationLog", back_populates="workflow_instanz")
+    global_events = relationship("GlobalEvent", secondary=workflow_instanz_global_events, back_populates="workflow_instanzen")
 
 
 class WorkflowItem(Base):
@@ -1014,10 +1126,10 @@ class FristenVorlage(Base):
 
 
 # ─────────────────────────────────────────
-# WorkflowSchrittTyp (Admin-definable workflow step types)
+# WorkflowSchrittTypConfig (Admin-definable workflow step types)
 # ─────────────────────────────────────────
 
-class WorkflowSchrittTyp(Base):
+class WorkflowSchrittTypConfig(Base):
     """Admin-definable workflow step types per Section 8."""
     __tablename__ = "workflow_schritt_typen"
 
@@ -1052,7 +1164,7 @@ class MandantWorkflowSchritt(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     mandant = relationship("Mandant", backref="workflow_schritte")
-    schritt_typ = relationship("WorkflowSchrittTyp")
+    schritt_typ = relationship("WorkflowSchrittTypConfig")
     erstellt_von = relationship("User", foreign_keys=[erstellt_von_id])
 
 
@@ -1073,3 +1185,181 @@ class PunkteKonfiguration(Base):
     ist_aktiv = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+# ─────────────────────────────────────────
+# Global Events (Jahreswechsel, Mindestlohnerhöhung, etc.)
+# ─────────────────────────────────────────
+
+class GlobalEvent(Base):
+    """
+    Globale Events wie Jahreswechsel oder Mindestlohnerhöhung,
+    die zusätzliche Workflow-Schritte für alle betroffenen Mandanten erzeugen.
+    """
+    __tablename__ = "global_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    tenant_id = Column(Integer, ForeignKey("tenants.id"), nullable=True)  # null = systemweit
+    
+    typ = Column(Enum(GlobalEventTyp), nullable=False)
+    name = Column(String(255), nullable=False)  # z.B. "Jahreswechsel 2026/2027"
+    beschreibung = Column(Text, nullable=True)
+    
+    # Zeitraum des Events
+    gueltig_von = Column(DateTime, nullable=False)  # Ab wann das Event gilt
+    gueltig_bis = Column(DateTime, nullable=True)    # Bis wann (null = unbefristet)
+    
+    # Betroffene Monate (JSON Array: [{"monat": 12, "jahr": 2026}, {"monat": 1, "jahr": 2027}])
+    betroffene_monate = Column(Text, nullable=True)
+    
+    # Filter für betroffene Mandanten (JSON)
+    # { "branchen": ["Baugewerbe"], "kategorien": ["A", "B"], "alle": true }
+    mandanten_filter = Column(Text, nullable=True)
+    
+    # Priorität bei mehreren Events
+    prioritaet = Column(Integer, default=0)
+    
+    # Status
+    ist_aktiv = Column(Boolean, default=True)
+    ist_abgeschlossen = Column(Boolean, default=False)
+    
+    erstellt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    tenant = relationship("Tenant", foreign_keys=[tenant_id])
+    erstellt_von = relationship("User", foreign_keys=[erstellt_von_id])
+    schritte = relationship("GlobalEventSchritt", back_populates="event", order_by="GlobalEventSchritt.position", cascade="all, delete-orphan")
+    workflow_instanzen = relationship("WorkflowInstanz", secondary=workflow_instanz_global_events, back_populates="global_events")
+
+
+class GlobalEventSchritt(Base):
+    """
+    Zusätzlicher Workflow-Schritt für ein globales Event.
+    Wird automatisch in betroffene Workflow-Instanzen eingespielt.
+    """
+    __tablename__ = "global_event_schritte"
+
+    id = Column(Integer, primary_key=True, index=True)
+    event_id = Column(Integer, ForeignKey("global_events.id"), nullable=False)
+    
+    position = Column(Integer, nullable=False)
+    titel = Column(String(255), nullable=False)
+    beschreibung = Column(Text, nullable=True)
+    schritttyp = Column(Enum(WorkflowSchrittTyp), default=WorkflowSchrittTyp.VERARBEITUNG)
+    
+    # Wann soll dieser Schritt eingefügt werden?
+    # "nach_schritt": ID des Vorlage-Items nach dem eingefügt wird
+    # "vor_abschluss": Vor dem Abschluss-Schritt
+    # "am_anfang": Ganz am Anfang
+    einfuege_position = Column(String(50), default="vor_abschluss")
+    referenz_schritt_id = Column(Integer, nullable=True)  # Optional: ID des Referenz-Schritts
+    
+    # Deadline konfiguration
+    faellig_offset_tage = Column(Integer, default=0)  # Relativ zum Monatsbeginn
+    fristart_referenz = Column(String(100), nullable=True)
+    fristart_offset_tage = Column(Integer, default=0)
+    
+    # Eigenschaften
+    ist_pflicht = Column(Boolean, default=True)
+    erfordert_dokument = Column(Boolean, default=False)
+    erfordert_pruefung = Column(Boolean, default=False)  # 4-Augen-Prinzip
+    verantwortlich_rolle = Column(Enum(UserRole), nullable=True)
+    
+    # Punkte
+    standard_punkte = Column(Float, default=1.0)
+    
+    # Zusätzliche Hinweise/Anleitungen
+    anleitung = Column(Text, nullable=True)
+    
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    event = relationship("GlobalEvent", back_populates="schritte")
+
+
+# ─────────────────────────────────────────
+# Branchenspezifische Workflow-Schritte
+# ─────────────────────────────────────────
+
+class BranchenWorkflowSchritt(Base):
+    """
+    Branchenspezifische Workflow-Schritte, die automatisch für alle
+    Mandanten einer bestimmten Branche hinzugefügt werden.
+    """
+    __tablename__ = "branchen_workflow_schritte"
+
+    id = Column(Integer, primary_key=True, index=True)
+    branche_id = Column(Integer, ForeignKey("branchen.id"), nullable=False)
+    
+    position = Column(Integer, nullable=False)
+    titel = Column(String(255), nullable=False)
+    beschreibung = Column(Text, nullable=True)
+    schritttyp = Column(Enum(WorkflowSchrittTyp), default=WorkflowSchrittTyp.VERARBEITUNG)
+    
+    # Einfüge-Position im Standard-Workflow
+    einfuege_position = Column(String(50), default="vor_abschluss")
+    referenz_schritt_id = Column(Integer, nullable=True)
+    
+    # Deadline-Konfiguration
+    faellig_offset_tage = Column(Integer, default=0)
+    fristart_referenz = Column(String(100), nullable=True)
+    fristart_offset_tage = Column(Integer, default=0)
+    
+    # Eigenschaften
+    ist_pflicht = Column(Boolean, default=True)
+    ist_optional_pro_mandant = Column(Boolean, default=False)  # Kann pro Mandant deaktiviert werden
+    erfordert_dokument = Column(Boolean, default=False)
+    erfordert_pruefung = Column(Boolean, default=False)
+    verantwortlich_rolle = Column(Enum(UserRole), nullable=True)
+    
+    # Punkte
+    standard_punkte = Column(Float, default=1.0)
+    
+    # Gültigkeit
+    gueltig_von = Column(DateTime, nullable=True)  # Ab wann gilt dieser Schritt
+    gueltig_bis = Column(DateTime, nullable=True)  # Bis wann
+    
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    branche = relationship("Branche", backref="workflow_schritte")
+
+
+# ─────────────────────────────────────────
+# Workflow-Schritt Herkunft (Tracking der Quellen)
+# ─────────────────────────────────────────
+
+class WorkflowItemHerkunft(Base):
+    """
+    Speichert die Herkunft eines Workflow-Items:
+    - Standard (aus Vorlage)
+    - Branchenspezifisch
+    - Mandantenspezifisch
+    - Globales Event
+    """
+    __tablename__ = "workflow_item_herkunft"
+
+    id = Column(Integer, primary_key=True, index=True)
+    workflow_item_id = Column(Integer, ForeignKey("workflow_items.id"), nullable=False)
+    
+    ebene = Column(Enum(WorkflowSchrittEbene), nullable=False)
+    
+    # Referenz je nach Ebene
+    vorlage_item_id = Column(Integer, ForeignKey("workflow_vorlage_items.id"), nullable=True)
+    branchen_schritt_id = Column(Integer, ForeignKey("branchen_workflow_schritte.id"), nullable=True)
+    mandant_schritt_id = Column(Integer, ForeignKey("mandant_workflow_schritte.id"), nullable=True)
+    global_event_schritt_id = Column(Integer, ForeignKey("global_event_schritte.id"), nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    # Relationships
+    workflow_item = relationship("WorkflowItem", backref="herkunft")
+    vorlage_item = relationship("WorkflowVorlageItem", foreign_keys=[vorlage_item_id])
+    branchen_schritt = relationship("BranchenWorkflowSchritt", foreign_keys=[branchen_schritt_id])
+    mandant_schritt = relationship("MandantWorkflowSchritt", foreign_keys=[mandant_schritt_id])
+    global_event_schritt = relationship("GlobalEventSchritt", foreign_keys=[global_event_schritt_id])

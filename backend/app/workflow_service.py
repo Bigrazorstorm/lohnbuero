@@ -21,7 +21,8 @@ from app.models import (
     Branche, BrancheFristenprofil, BrancheFrist, Mandant,
     ChecklistItemStatus, WorkflowStatus, Ampelstatus, 
     FristenRegeltyp, WorkflowSchrittTyp, TicketPrioritaet, 
-    Ticket, User
+    Ticket, User, GlobalEvent, GlobalEventSchritt, BranchenWorkflowSchritt,
+    MandantWorkflowSchritt, WorkflowItemHerkunft, WorkflowSchrittEbene
 )
 
 
@@ -360,6 +361,18 @@ class WorkflowService:
         if vorlage:
             self._populate_workflow_items(instanz, vorlage, mandant)
         
+        # Add branch-specific steps
+        self._add_branchen_schritte(instanz, mandant)
+        
+        # Add mandant-specific steps
+        self._add_mandant_schritte(instanz, mandant)
+        
+        # Add global event steps (Jahreswechsel, Mindestlohnerhöhung, etc.)
+        self._add_global_event_schritte(instanz, mandant, monat, jahr)
+        
+        # Re-calculate positions after adding all steps
+        self._recalculate_positions(instanz)
+        
         # Calculate SLA deadline
         instanz.sla_deadline = self.calculate_sla_deadline(instanz, mandant)
         
@@ -435,7 +448,297 @@ class WorkflowService:
                 status=ChecklistItemStatus.OFFEN,
             )
             self.db.add(item)
+            self.db.flush()
+            
+            # Track source (Herkunft) of this item
+            herkunft = WorkflowItemHerkunft(
+                workflow_item_id=item.id,
+                ebene=WorkflowSchrittEbene.STANDARD,
+                vorlage_item_id=vorlage_item.id
+            )
+            self.db.add(herkunft)
         
+        self.db.flush()
+    
+    def _add_branchen_schritte(
+        self,
+        instanz: WorkflowInstanz,
+        mandant: Mandant
+    ) -> None:
+        """Add branch-specific workflow steps for the mandate's branch."""
+        from datetime import datetime as dt
+        now = dt.utcnow()
+        
+        # Get all branches for this mandate
+        branche_ids = [b.id for b in mandant.branchen_liste] if mandant.branchen_liste else []
+        
+        # Also try to match by branche name
+        if mandant.branche:
+            branche = self.db.query(Branche).filter(
+                Branche.name == mandant.branche,
+                Branche.ist_aktiv == True
+            ).first()
+            if branche and branche.id not in branche_ids:
+                branche_ids.append(branche.id)
+        
+        if not branche_ids:
+            return
+        
+        # Get active branch-specific steps
+        branchen_schritte = self.db.query(BranchenWorkflowSchritt).filter(
+            BranchenWorkflowSchritt.branche_id.in_(branche_ids),
+            BranchenWorkflowSchritt.ist_aktiv == True,
+            (BranchenWorkflowSchritt.gueltig_von == None) | (BranchenWorkflowSchritt.gueltig_von <= now),
+            (BranchenWorkflowSchritt.gueltig_bis == None) | (BranchenWorkflowSchritt.gueltig_bis >= now)
+        ).order_by(BranchenWorkflowSchritt.branche_id, BranchenWorkflowSchritt.position).all()
+        
+        # Check if any optional steps are disabled for this mandate
+        disabled_steps = set()
+        if mandant.workflow_konfiguration:
+            config = json.loads(mandant.workflow_konfiguration)
+            disabled_steps = set(config.get("disabled_branchen_schritte", []))
+        
+        max_position = max([item.position for item in instanz.items], default=0)
+        
+        for schritt in branchen_schritte:
+            # Skip if optional and disabled for this mandate
+            if schritt.ist_optional_pro_mandant and schritt.id in disabled_steps:
+                continue
+            
+            # Calculate deadline
+            deadline = self._calculate_schritt_deadline(schritt, instanz, mandant)
+            sla_warning = deadline - timedelta(days=2) if deadline else None
+            
+            max_position += 1
+            item = WorkflowItem(
+                instanz_id=instanz.id,
+                position=max_position,
+                titel=f"[{mandant.branche}] {schritt.titel}",
+                beschreibung=schritt.beschreibung,
+                schritttyp=schritt.schritttyp,
+                verantwortlich_rolle=schritt.verantwortlich_rolle,
+                faellig_datum=deadline,
+                sla_warnung_ab=sla_warning,
+                ist_pflicht=schritt.ist_pflicht,
+                erfordert_dokument=schritt.erfordert_dokument,
+                erfordert_pruefung=schritt.erfordert_pruefung,
+                fristart_referenz=schritt.fristart_referenz,
+                punkte=schritt.standard_punkte,
+                status=ChecklistItemStatus.OFFEN,
+            )
+            self.db.add(item)
+            self.db.flush()
+            
+            # Track source
+            herkunft = WorkflowItemHerkunft(
+                workflow_item_id=item.id,
+                ebene=WorkflowSchrittEbene.BRANCHE,
+                branchen_schritt_id=schritt.id
+            )
+            self.db.add(herkunft)
+        
+        self.db.flush()
+    
+    def _add_mandant_schritte(
+        self,
+        instanz: WorkflowInstanz,
+        mandant: Mandant
+    ) -> None:
+        """Add mandant-specific workflow steps."""
+        from datetime import datetime as dt
+        now = dt.utcnow()
+        
+        # Get active mandant-specific steps
+        mandant_schritte = self.db.query(MandantWorkflowSchritt).filter(
+            MandantWorkflowSchritt.mandant_id == mandant.id,
+            MandantWorkflowSchritt.ist_aktiv == True,
+            (MandantWorkflowSchritt.aenderung_zum == None) | (MandantWorkflowSchritt.aenderung_zum <= now)
+        ).all()
+        
+        max_position = max([item.position for item in instanz.items], default=0)
+        
+        for mws in mandant_schritte:
+            schritt_typ = mws.schritt_typ
+            if not schritt_typ or not schritt_typ.ist_aktiv:
+                continue
+            
+            # Calculate deadline from schritt_typ configuration
+            deadline = None
+            if schritt_typ.fristart_referenz:
+                # Try to resolve the deadline reference
+                deadline = self._resolve_fristart(
+                    schritt_typ.fristart_referenz, instanz, mandant
+                )
+                if deadline and schritt_typ.fristart_offset_tage:
+                    deadline = deadline + timedelta(days=schritt_typ.fristart_offset_tage)
+            
+            sla_warning = deadline - timedelta(days=2) if deadline else None
+            
+            max_position += 1
+            item = WorkflowItem(
+                instanz_id=instanz.id,
+                position=max_position,
+                titel=f"[Spezifisch] {schritt_typ.name}",
+                beschreibung=schritt_typ.beschreibung,
+                verantwortlich_rolle=schritt_typ.standard_rolle,
+                faellig_datum=deadline,
+                sla_warnung_ab=sla_warning,
+                ist_pflicht=schritt_typ.ist_pflicht,
+                punkte=schritt_typ.standard_punkte,
+                status=ChecklistItemStatus.OFFEN,
+            )
+            self.db.add(item)
+            self.db.flush()
+            
+            # Track source
+            herkunft = WorkflowItemHerkunft(
+                workflow_item_id=item.id,
+                ebene=WorkflowSchrittEbene.MANDANT,
+                mandant_schritt_id=mws.id
+            )
+            self.db.add(herkunft)
+        
+        self.db.flush()
+    
+    def _add_global_event_schritte(
+        self,
+        instanz: WorkflowInstanz,
+        mandant: Mandant,
+        monat: int,
+        jahr: int
+    ) -> None:
+        """Add workflow steps from active global events (Jahreswechsel, etc.)."""
+        from datetime import datetime as dt
+        now = dt.utcnow()
+        
+        # Find active global events for this month/year
+        events = self.db.query(GlobalEvent).filter(
+            GlobalEvent.ist_aktiv == True,
+            GlobalEvent.ist_abgeschlossen == False,
+            GlobalEvent.gueltig_von <= now,
+            (GlobalEvent.gueltig_bis == None) | (GlobalEvent.gueltig_bis >= now),
+            # Filter by tenant if applicable
+            (GlobalEvent.tenant_id == None) | (GlobalEvent.tenant_id == mandant.tenant_id)
+        ).all()
+        
+        matching_events = []
+        for event in events:
+            if self._event_applies_to_month(event, monat, jahr) and \
+               self._event_applies_to_mandant(event, mandant):
+                matching_events.append(event)
+                # Link event to workflow instance
+                instanz.global_events.append(event)
+        
+        max_position = max([item.position for item in instanz.items], default=0)
+        
+        for event in matching_events:
+            for schritt in sorted(event.schritte, key=lambda s: s.position):
+                if not schritt.ist_aktiv:
+                    continue
+                
+                # Calculate deadline
+                deadline = self._calculate_schritt_deadline(schritt, instanz, mandant)
+                sla_warning = deadline - timedelta(days=2) if deadline else None
+                
+                max_position += 1
+                item = WorkflowItem(
+                    instanz_id=instanz.id,
+                    position=max_position,
+                    titel=f"[{event.name}] {schritt.titel}",
+                    beschreibung=schritt.beschreibung or schritt.anleitung,
+                    schritttyp=schritt.schritttyp,
+                    verantwortlich_rolle=schritt.verantwortlich_rolle,
+                    faellig_datum=deadline,
+                    sla_warnung_ab=sla_warning,
+                    ist_pflicht=schritt.ist_pflicht,
+                    erfordert_dokument=schritt.erfordert_dokument,
+                    erfordert_pruefung=schritt.erfordert_pruefung,
+                    fristart_referenz=schritt.fristart_referenz,
+                    punkte=schritt.standard_punkte,
+                    status=ChecklistItemStatus.OFFEN,
+                )
+                self.db.add(item)
+                self.db.flush()
+                
+                # Track source
+                herkunft = WorkflowItemHerkunft(
+                    workflow_item_id=item.id,
+                    ebene=WorkflowSchrittEbene.GLOBAL_EVENT,
+                    global_event_schritt_id=schritt.id
+                )
+                self.db.add(herkunft)
+        
+        self.db.flush()
+    
+    def _event_applies_to_month(self, event: GlobalEvent, monat: int, jahr: int) -> bool:
+        """Check if an event applies to a specific month/year."""
+        if not event.betroffene_monate:
+            return True  # No filter = applies to all
+        
+        try:
+            monate = json.loads(event.betroffene_monate)
+            for m in monate:
+                if m.get("monat") == monat and m.get("jahr") == jahr:
+                    return True
+            return False
+        except (json.JSONDecodeError, TypeError):
+            return True
+    
+    def _event_applies_to_mandant(self, event: GlobalEvent, mandant: Mandant) -> bool:
+        """Check if an event applies to a specific mandant."""
+        if not event.mandanten_filter:
+            return True  # No filter = applies to all
+        
+        try:
+            filter_config = json.loads(event.mandanten_filter)
+            
+            # Check "alle" flag
+            if filter_config.get("alle", False):
+                return True
+            
+            # Check branch filter
+            if "branchen" in filter_config:
+                mandant_branchen = [mandant.branche] if mandant.branche else []
+                mandant_branchen.extend([b.name for b in mandant.branchen_liste])
+                if not any(b in filter_config["branchen"] for b in mandant_branchen):
+                    return False
+            
+            # Check category filter
+            if "kategorien" in filter_config:
+                if mandant.kategorie and mandant.kategorie.value not in filter_config["kategorien"]:
+                    return False
+            
+            return True
+        except (json.JSONDecodeError, TypeError):
+            return True
+    
+    def _calculate_schritt_deadline(
+        self,
+        schritt,  # BranchenWorkflowSchritt or GlobalEventSchritt
+        instanz: WorkflowInstanz,
+        mandant: Mandant
+    ) -> Optional[datetime]:
+        """Calculate deadline for a branch or global event step."""
+        month_start = datetime(instanz.jahr, instanz.monat, 1)
+        
+        # Priority 1: Fristart reference
+        if hasattr(schritt, 'fristart_referenz') and schritt.fristart_referenz:
+            frist_date = self._resolve_fristart(
+                schritt.fristart_referenz, instanz, mandant
+            )
+            if frist_date:
+                offset = getattr(schritt, 'fristart_offset_tage', 0) or 0
+                return frist_date + timedelta(days=offset)
+        
+        # Priority 2: Offset from month start
+        offset = getattr(schritt, 'faellig_offset_tage', 0) or 0
+        return month_start + timedelta(days=offset)
+    
+    def _recalculate_positions(self, instanz: WorkflowInstanz) -> None:
+        """Recalculate positions of all items, sorting by original position and insert position."""
+        items = sorted(instanz.items, key=lambda x: x.position)
+        for idx, item in enumerate(items, start=1):
+            item.position = idx
         self.db.flush()
     
     # ═══════════════════════════════════════════════════════════════

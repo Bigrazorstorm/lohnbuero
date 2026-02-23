@@ -6,7 +6,7 @@ from app.models import (
     UserRole, MandantKategorie, Abgabeweg, WorkflowStatus,
     Ampelstatus, ChecklistItemStatus, TicketStatus, TicketPrioritaet,
     EskalationStufe, EmailLogStatus, FristenRegeltyp, SonderaufgabeStatus,
-    MandantKontaktRolle,
+    MandantKontaktRolle, GlobalEventTyp, WorkflowSchrittEbene, WorkflowSchrittTyp,
 )
 
 # ─────────────────────────────────────────
@@ -1190,3 +1190,265 @@ class MandantPunkteDetail(BaseModel):
     punkte: float = 0.0
     schritte: List[str] = []
     sonderaufgaben_punkte: float = 0.0
+
+
+# ─────────────────────────────────────────
+# Tenant (Multi-Tenancy)
+# ─────────────────────────────────────────
+
+class TenantBase(BaseModel):
+    name: str
+    code: str
+    beschreibung: Optional[str] = None
+    logo_url: Optional[str] = None
+    primaerfarbe: Optional[str] = None
+    konfiguration: Optional[str] = None  # JSON
+    ist_aktiv: bool = True
+
+class TenantCreate(TenantBase):
+    pass
+
+class TenantUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    beschreibung: Optional[str] = None
+    logo_url: Optional[str] = None
+    primaerfarbe: Optional[str] = None
+    konfiguration: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+
+class TenantOut(TenantBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Abrechnungsfirma
+# ─────────────────────────────────────────
+
+class AbrechnungsfirmaBase(BaseModel):
+    name: str
+    code: str
+    beschreibung: Optional[str] = None
+    strasse: Optional[str] = None
+    plz: Optional[str] = None
+    ort: Optional[str] = None
+    land: str = "Deutschland"
+    telefon: Optional[str] = None
+    email: Optional[str] = None
+    steuernummer: Optional[str] = None
+    ustid: Optional[str] = None
+    bank_name: Optional[str] = None
+    iban: Optional[str] = None
+    bic: Optional[str] = None
+    workflow_konfiguration: Optional[str] = None  # JSON
+    ist_aktiv: bool = True
+
+class AbrechnungsfirmaCreate(AbrechnungsfirmaBase):
+    tenant_id: int
+
+class AbrechnungsfirmaUpdate(BaseModel):
+    name: Optional[str] = None
+    code: Optional[str] = None
+    beschreibung: Optional[str] = None
+    strasse: Optional[str] = None
+    plz: Optional[str] = None
+    ort: Optional[str] = None
+    land: Optional[str] = None
+    telefon: Optional[str] = None
+    email: Optional[str] = None
+    steuernummer: Optional[str] = None
+    ustid: Optional[str] = None
+    bank_name: Optional[str] = None
+    iban: Optional[str] = None
+    bic: Optional[str] = None
+    workflow_konfiguration: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+
+class AbrechnungsfirmaOut(AbrechnungsfirmaBase):
+    id: int
+    tenant_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Global Event (Jahreswechsel, Mindestlohnerhöhung, etc.)
+# ─────────────────────────────────────────
+
+class GlobalEventSchrittBase(BaseModel):
+    position: int
+    titel: str
+    beschreibung: Optional[str] = None
+    schritttyp: WorkflowSchrittTyp = WorkflowSchrittTyp.VERARBEITUNG
+    einfuege_position: str = "vor_abschluss"
+    referenz_schritt_id: Optional[int] = None
+    faellig_offset_tage: int = 0
+    fristart_referenz: Optional[str] = None
+    fristart_offset_tage: int = 0
+    ist_pflicht: bool = True
+    erfordert_dokument: bool = False
+    erfordert_pruefung: bool = False
+    verantwortlich_rolle: Optional[UserRole] = None
+    standard_punkte: float = 1.0
+    anleitung: Optional[str] = None
+    ist_aktiv: bool = True
+
+class GlobalEventSchrittCreate(GlobalEventSchrittBase):
+    pass
+
+class GlobalEventSchrittUpdate(BaseModel):
+    position: Optional[int] = None
+    titel: Optional[str] = None
+    beschreibung: Optional[str] = None
+    schritttyp: Optional[WorkflowSchrittTyp] = None
+    einfuege_position: Optional[str] = None
+    referenz_schritt_id: Optional[int] = None
+    faellig_offset_tage: Optional[int] = None
+    fristart_referenz: Optional[str] = None
+    fristart_offset_tage: Optional[int] = None
+    ist_pflicht: Optional[bool] = None
+    erfordert_dokument: Optional[bool] = None
+    erfordert_pruefung: Optional[bool] = None
+    verantwortlich_rolle: Optional[UserRole] = None
+    standard_punkte: Optional[float] = None
+    anleitung: Optional[str] = None
+    ist_aktiv: Optional[bool] = None
+
+class GlobalEventSchrittOut(GlobalEventSchrittBase):
+    id: int
+    event_id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class GlobalEventBase(BaseModel):
+    typ: GlobalEventTyp
+    name: str
+    beschreibung: Optional[str] = None
+    gueltig_von: datetime
+    gueltig_bis: Optional[datetime] = None
+    betroffene_monate: Optional[str] = None  # JSON
+    mandanten_filter: Optional[str] = None  # JSON
+    prioritaet: int = 0
+    ist_aktiv: bool = True
+
+class GlobalEventCreate(GlobalEventBase):
+    tenant_id: Optional[int] = None
+    schritte: List[GlobalEventSchrittCreate] = []
+
+class GlobalEventUpdate(BaseModel):
+    typ: Optional[GlobalEventTyp] = None
+    name: Optional[str] = None
+    beschreibung: Optional[str] = None
+    gueltig_von: Optional[datetime] = None
+    gueltig_bis: Optional[datetime] = None
+    betroffene_monate: Optional[str] = None
+    mandanten_filter: Optional[str] = None
+    prioritaet: Optional[int] = None
+    ist_aktiv: Optional[bool] = None
+    ist_abgeschlossen: Optional[bool] = None
+
+class GlobalEventOut(GlobalEventBase):
+    id: int
+    tenant_id: Optional[int] = None
+    ist_abgeschlossen: bool = False
+    erstellt_von: Optional[UserShort] = None
+    schritte: List[GlobalEventSchrittOut] = []
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Branchenspezifische Workflow-Schritte
+# ─────────────────────────────────────────
+
+class BranchenWorkflowSchrittBase(BaseModel):
+    position: int
+    titel: str
+    beschreibung: Optional[str] = None
+    schritttyp: WorkflowSchrittTyp = WorkflowSchrittTyp.VERARBEITUNG
+    einfuege_position: str = "vor_abschluss"
+    referenz_schritt_id: Optional[int] = None
+    faellig_offset_tage: int = 0
+    fristart_referenz: Optional[str] = None
+    fristart_offset_tage: int = 0
+    ist_pflicht: bool = True
+    ist_optional_pro_mandant: bool = False
+    erfordert_dokument: bool = False
+    erfordert_pruefung: bool = False
+    verantwortlich_rolle: Optional[UserRole] = None
+    standard_punkte: float = 1.0
+    gueltig_von: Optional[datetime] = None
+    gueltig_bis: Optional[datetime] = None
+    ist_aktiv: bool = True
+
+class BranchenWorkflowSchrittCreate(BranchenWorkflowSchrittBase):
+    branche_id: int
+
+class BranchenWorkflowSchrittUpdate(BaseModel):
+    position: Optional[int] = None
+    titel: Optional[str] = None
+    beschreibung: Optional[str] = None
+    schritttyp: Optional[WorkflowSchrittTyp] = None
+    einfuege_position: Optional[str] = None
+    referenz_schritt_id: Optional[int] = None
+    faellig_offset_tage: Optional[int] = None
+    fristart_referenz: Optional[str] = None
+    fristart_offset_tage: Optional[int] = None
+    ist_pflicht: Optional[bool] = None
+    ist_optional_pro_mandant: Optional[bool] = None
+    erfordert_dokument: Optional[bool] = None
+    erfordert_pruefung: Optional[bool] = None
+    verantwortlich_rolle: Optional[UserRole] = None
+    standard_punkte: Optional[float] = None
+    gueltig_von: Optional[datetime] = None
+    gueltig_bis: Optional[datetime] = None
+    ist_aktiv: Optional[bool] = None
+
+class BranchenWorkflowSchrittOut(BranchenWorkflowSchrittBase):
+    id: int
+    branche_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Workflow Item Herkunft (Tracking)
+# ─────────────────────────────────────────
+
+class WorkflowItemHerkunftOut(BaseModel):
+    id: int
+    workflow_item_id: int
+    ebene: WorkflowSchrittEbene
+    vorlage_item_id: Optional[int] = None
+    branchen_schritt_id: Optional[int] = None
+    mandant_schritt_id: Optional[int] = None
+    global_event_schritt_id: Optional[int] = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Erweiterter Workflow-Instanz mit Herkunft
+# ─────────────────────────────────────────
+
+class WorkflowItemMitHerkunftOut(WorkflowItemOut):
+    herkunft: Optional[WorkflowItemHerkunftOut] = None
+    ebene: Optional[WorkflowSchrittEbene] = None  # Convenience field
+
+
+class WorkflowInstanzMitHerkunftOut(WorkflowInstanzOut):
+    items: List[WorkflowItemMitHerkunftOut] = []
+    global_events: List[GlobalEventOut] = []
