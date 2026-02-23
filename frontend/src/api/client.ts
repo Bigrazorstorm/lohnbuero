@@ -157,9 +157,89 @@ export const adminApi = {
   // Upload Config
   getUploadConfig: () => api.get('/admin/upload-config'),
   updateUploadConfig: (data: unknown) => api.patch('/admin/upload-config', data),
+
+  // v2.0 Tenants
+  listTenants: (includeInactive = false) =>
+    api.get('/admin/tenants', { params: { include_inactive: includeInactive } }),
+  createTenant: (data: unknown) => api.post('/admin/tenants', data),
+  updateTenant: (id: number, data: unknown) => api.patch(`/admin/tenants/${id}`, data),
+  getTenant: (id: number) => api.get(`/admin/tenants/${id}`),
+
+  // v2.0 Abrechnungsfirmen
+  listAbrechnungsfirmen: (tenantId: number, includeInactive = false) =>
+    api.get(`/admin/tenants/${tenantId}/abrechnungsfirmen`, { params: { include_inactive: includeInactive } }),
+  createAbrechnungsfirma: (data: unknown) => api.post('/admin/abrechnungsfirmen', data),
+  updateAbrechnungsfirma: (id: number, data: unknown) => api.patch(`/admin/abrechnungsfirmen/${id}`, data),
+
+  // v2.0 Global Events
+  listGlobalEvents: (params?: Record<string, unknown>) =>
+    api.get('/admin/global-events', { params }),
+  getGlobalEvent: (id: number) => api.get(`/admin/global-events/${id}`),
+  createGlobalEvent: (data: unknown) => api.post('/admin/global-events', data),
+  updateGlobalEvent: (id: number, data: unknown) => api.patch(`/admin/global-events/${id}`, data),
+  deleteGlobalEvent: (id: number) => api.delete(`/admin/global-events/${id}`),
+  addGlobalEventSchritt: (eventId: number, data: unknown) =>
+    api.post(`/admin/global-events/${eventId}/schritte`, data),
+  updateGlobalEventSchritt: (schrittId: number, data: unknown) =>
+    api.patch(`/admin/global-events/schritte/${schrittId}`, data),
+  deleteGlobalEventSchritt: (schrittId: number) =>
+    api.delete(`/admin/global-events/schritte/${schrittId}`),
+  getGlobalEventTypen: () => api.get('/admin/global-event-typen'),
+
+  // v2.0 Branchenspezifische Workflow-Schritte
+  listBranchenWorkflowSchritte: (brancheId: number, includeInactive = false) =>
+    api.get(`/admin/branchen/${brancheId}/workflow-schritte`, { params: { include_inactive: includeInactive } }),
+  createBranchenWorkflowSchritt: (data: unknown) =>
+    api.post('/admin/branchen-workflow-schritte', data),
+  updateBranchenWorkflowSchritt: (id: number, data: unknown) =>
+    api.patch(`/admin/branchen-workflow-schritte/${id}`, data),
+  deleteBranchenWorkflowSchritt: (id: number) =>
+    api.delete(`/admin/branchen-workflow-schritte/${id}`),
 }
 
-// ── Ticket-Anhänge ───────────────────────────
+// ── Fristen API ───────────────────────────────
+export const fristenApi = {
+  listProfiles: (mandantId?: number) =>
+    api.get('/fristen/profiles', { params: mandantId ? { mandant_id: mandantId } : {} }),
+  getProfile: (id: number) =>
+    api.get(`/fristen/profiles/${id}`),
+  createProfile: (data: unknown) =>
+    api.post('/fristen/profiles', data),
+  updateProfile: (id: number, data: unknown) =>
+    api.patch(`/fristen/profiles/${id}`, data),
+  deleteProfile: (id: number) =>
+    api.delete(`/fristen/profiles/${id}`),
+  listVorlagen: () =>
+    api.get('/fristen/vorlagen'),
+}
+
+// ── Schritt-Typen API ─────────────────────────
+export const schrittTypenApi = {
+  list: (includeInactive = false) =>
+    api.get('/schritt-typen', { params: { include_inactive: includeInactive } }),
+  get: (id: number) => api.get(`/schritt-typen/${id}`),
+  create: (data: unknown) => api.post('/schritt-typen', data),
+  update: (id: number, data: unknown) => api.patch(`/schritt-typen/${id}`, data),
+  delete: (id: number) => api.delete(`/schritt-typen/${id}`),
+  listMandantSchritte: (mandantId: number) =>
+    api.get(`/schritt-typen/mandant/${mandantId}`),
+  addMandantSchritt: (mandantId: number, schrittTypId: number) =>
+    api.post('/schritt-typen/mandant-schritte', { mandant_id: mandantId, schritt_typ_id: schrittTypId }),
+  removeMandantSchritt: (mandantId: number, schrittTypId: number) =>
+    api.delete(`/schritt-typen/mandant/${mandantId}/schritt/${schrittTypId}`),
+}
+
+// ── Reporting API ─────────────────────────────
+export const reportingApi = {
+  mitarbeiterPunkte: (params?: Record<string, unknown>) =>
+    api.get('/reporting/mitarbeiter-punkte', { params }),
+  mandantenPunkte: (params?: Record<string, unknown>) =>
+    api.get('/reporting/mandanten-punkte', { params }),
+  exportCsv: (params?: Record<string, unknown>) =>
+    api.get('/reporting/export/csv', { params, responseType: 'blob' }),
+  exportExcel: (params?: Record<string, unknown>) =>
+    api.get('/reporting/export/excel', { params, responseType: 'blob' }),
+
 export const ticketAnhangApi = {
   upload: (ticketId: number, formData: FormData) =>
     api.post(`/tickets/${ticketId}/anhaenge`, formData, {

@@ -499,3 +499,141 @@ export interface UploadKonfiguration {
   created_at: string
   updated_at: string
 }
+// ── v2.0: Multi-Tenancy ──────────────────────────────────
+export interface Tenant {
+  id: number
+  name: string
+  code: string
+  beschreibung?: string
+  logo_url?: string
+  primaerfarbe?: string
+  konfiguration?: string
+  ist_aktiv: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Abrechnungsfirma {
+  id: number
+  tenant_id: number
+  name: string
+  code: string
+  beschreibung?: string
+  strasse?: string
+  plz?: string
+  ort?: string
+  land: string
+  telefon?: string
+  email?: string
+  steuernummer?: string
+  ustid?: string
+  bank_name?: string
+  iban?: string
+  bic?: string
+  workflow_konfiguration?: string
+  ist_aktiv: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ── Global Events ────────────────────────────────────────
+export type GlobalEventTyp = 
+  | 'jahreswechsel'
+  | 'mindestlohn_erhoehung'
+  | 'gesetzesaenderung'
+  | 'sv_werte_aenderung'
+  | 'steueraenderung'
+  | 'kurzarbeit'
+  | 'corona_massnahme'
+  | 'sonstig'
+
+export interface GlobalEventSchritt {
+  id: number
+  event_id: number
+  position: number
+  titel: string
+  beschreibung?: string
+  schritttyp: string
+  einfuege_position: string
+  referenz_schritt_id?: number
+  faellig_offset_tage: number
+  fristart_referenz?: string
+  fristart_offset_tage: number
+  ist_pflicht: boolean
+  erfordert_dokument: boolean
+  erfordert_pruefung: boolean
+  verantwortlich_rolle?: UserRole
+  standard_punkte: number
+  anleitung?: string
+  ist_aktiv: boolean
+  created_at: string
+}
+
+export interface GlobalEvent {
+  id: number
+  tenant_id?: number
+  typ: GlobalEventTyp
+  name: string
+  beschreibung?: string
+  gueltig_von: string
+  gueltig_bis?: string
+  betroffene_monate?: string
+  mandanten_filter?: string
+  prioritaet: number
+  ist_aktiv: boolean
+  ist_abgeschlossen: boolean
+  erstellt_von?: UserShort
+  schritte: GlobalEventSchritt[]
+  created_at: string
+  updated_at: string
+}
+
+// ── Branchenspezifische Workflow-Schritte ────────────────
+export interface BranchenWorkflowSchritt {
+  id: number
+  branche_id: number
+  position: number
+  titel: string
+  beschreibung?: string
+  schritttyp: string
+  einfuege_position: string
+  referenz_schritt_id?: number
+  faellig_offset_tage: number
+  fristart_referenz?: string
+  fristart_offset_tage: number
+  ist_pflicht: boolean
+  ist_optional_pro_mandant: boolean
+  erfordert_dokument: boolean
+  erfordert_pruefung: boolean
+  verantwortlich_rolle?: UserRole
+  standard_punkte: number
+  gueltig_von?: string
+  gueltig_bis?: string
+  ist_aktiv: boolean
+  created_at: string
+  updated_at: string
+}
+
+// ── Workflow-Item Herkunft ───────────────────────────────
+export type WorkflowSchrittEbene = 'standard' | 'branche' | 'mandant' | 'global_event'
+
+export interface WorkflowItemHerkunft {
+  id: number
+  workflow_item_id: number
+  ebene: WorkflowSchrittEbene
+  vorlage_item_id?: number
+  branchen_schritt_id?: number
+  mandant_schritt_id?: number
+  global_event_schritt_id?: number
+  created_at: string
+}
+
+export interface WorkflowItemMitHerkunft extends WorkflowItem {
+  herkunft?: WorkflowItemHerkunft
+  ebene?: WorkflowSchrittEbene
+}
+
+export interface WorkflowInstanzMitHerkunft extends WorkflowInstanz {
+  items: WorkflowItemMitHerkunft[]
+  global_events: GlobalEvent[]
+}

@@ -14,6 +14,9 @@ import Audit from './pages/Audit'
 import EmailTemplates from './pages/EmailTemplates'
 import AdminStammdaten from './pages/AdminStammdaten'
 import AdminMailConfig from './pages/AdminMailConfig'
+import { AdminGlobalEvents } from './pages/AdminGlobalEvents'
+import { AdminBranchenSchritte } from './pages/AdminBranchenSchritte'
+import { AdminTenants } from './pages/AdminTenants'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -79,6 +82,30 @@ export default function App() {
           element={
             <RequireAdmin>
               <AdminMailConfig />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="admin/global-events"
+          element={
+            <RequireAdmin>
+              <AdminGlobalEvents />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="admin/branche-schritte"
+          element={
+            <RequireAdmin>
+              <AdminBranchenSchritte />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="admin/tenants"
+          element={
+            <RequireAdmin>
+              <AdminTenants />
             </RequireAdmin>
           }
         />

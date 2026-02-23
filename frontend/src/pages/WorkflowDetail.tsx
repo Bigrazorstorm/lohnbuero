@@ -10,6 +10,7 @@ import type { WorkflowInstanz, ChecklistItemStatus, WorkflowStatus, AuditLog } f
 import Ampel from '../components/Ampel'
 import { WorkflowStatusBadge, ChecklistStatusBadge } from '../components/StatusBadge'
 import { useAuthStore } from '../store/auth'
+import { WorkflowItemMitHerkunft } from '../types'
 
 const PROCESS_STEPS = [
   { key: 'unterlagen_eingegangen_am', vonKey: 'unterlagen_eingegangen_von', faelligKey: 'unterlagen_faellig', label: 'Unterlagen eingegangen' },
@@ -193,6 +194,19 @@ export default function WorkflowDetail() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className={`text-sm font-medium ${item.status === 'erledigt' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{item.titel}</span>
+                          {item.herkunft && (
+                            <span className={`badge text-xs ${
+                              item.herkunft.ebene === 'standard' ? 'bg-blue-100 text-blue-600' :
+                              item.herkunft.ebene === 'branche' ? 'bg-purple-100 text-purple-600' :
+                              item.herkunft.ebene === 'mandant' ? 'bg-green-100 text-green-600' :
+                              'bg-yellow-100 text-yellow-600'
+                            }`}>
+                              {item.herkunft.ebene === 'standard' ? 'Standard' :
+                               item.herkunft.ebene === 'branche' ? 'Branche' :
+                               item.herkunft.ebene === 'mandant' ? 'Mandant-spezifisch' :
+                               'Global Event'} {item.herkunft.source_name && `· ${item.herkunft.source_name}`}
+                            </span>
+                          )}
                           {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
                           {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
                           {item.erfordert_dokument && <span className="badge bg-blue-100 text-blue-600 text-xs">Dokument</span>}
