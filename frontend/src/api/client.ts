@@ -65,6 +65,35 @@ export const workflowsApi = {
     api.post('/workflows/bulk-create-monthly', null, { params: { monat, jahr } }),
   listVorlagen: () => api.get('/workflows/vorlagen'),
   createVorlage: (data: unknown) => api.post('/workflows/vorlagen', data),
+  
+  // NEW (v2.1): Workflow Phasen
+  listPhasen: (vorlageId: number) => api.get(`/workflows/vorlagen/${vorlageId}/phasen`),
+  createPhase: (vorlageId: number, data: unknown) =>
+    api.post(`/workflows/vorlagen/${vorlageId}/phasen`, data),
+  updatePhase: (vorlageId: number, phaseId: number, data: unknown) =>
+    api.patch(`/workflows/vorlagen/${vorlageId}/phasen/${phaseId}`, data),
+  deletePhase: (vorlageId: number, phaseId: number) =>
+    api.delete(`/workflows/vorlagen/${vorlageId}/phasen/${phaseId}`),
+  reorderPhasen: (vorlageId: number, phaseIds: number[]) =>
+    api.post(`/workflows/vorlagen/${vorlageId}/phasen/reorder`, phaseIds),
+  
+  // NEW (v2.1): Workflow Item Dependencies
+  listDependencies: (vorlageId: number) =>
+    api.get(`/workflows/vorlagen/${vorlageId}/dependencies`),
+  createDependency: (vorlageId: number, data: unknown) =>
+    api.post(`/workflows/vorlagen/${vorlageId}/dependencies`, data),
+  updateDependency: (vorlageId: number, dependencyId: number, data: unknown) =>
+    api.patch(`/workflows/vorlagen/${vorlageId}/dependencies/${dependencyId}`, data),
+  deleteDependency: (vorlageId: number, dependencyId: number) =>
+    api.delete(`/workflows/vorlagen/${vorlageId}/dependencies/${dependencyId}`),
+  getDependencyGraph: (vorlageId: number) =>
+    api.get(`/workflows/vorlagen/${vorlageId}/dependencies/graph`),
+  
+  // NEW (v2.1): Dependency Analysis
+  getItemBlockages: (instanzId: number, itemId: number) =>
+    api.get(`/workflows/${instanzId}/items/${itemId}/blockages`),
+  listBlockedItems: (instanzId: number) =>
+    api.get(`/workflows/${instanzId}/blocked-items`),
 }
 
 // ── Tickets ───────────────────────────────────

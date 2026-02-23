@@ -197,4 +197,67 @@ def run_migrations():
         if "abrechnungsfirma_id" not in mandant_cols:
             conn.execute(text("ALTER TABLE mandanten ADD COLUMN abrechnungsfirma_id INTEGER"))
 
+        # ═══════════════════════════════════════════════════════════════
+        # v2.1 - Workflow Phases & Dependencies (Phase-based UI)
+        # ═══════════════════════════════════════════════════════════════
+        
+        # workflow_phasen – new table for phase structure
+        tables = inspector.get_table_names()
+        if "workflow_phasen" not in tables:
+            conn.execute(text("""
+                CREATE TABLE workflow_phasen (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    vorlage_id INTEGER NOT NULL,
+                    position INTEGER NOT NULL,
+                    name TEXT NOT NULL,
+                    icon TEXT,
+                    standard_frist_tag INTEGER,
+                    ist_kernprozess BOOLEAN DEFAULT FALSE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (vorlage_id) REFERENCES workflow_vorlagen(id) ON DELETE CASCADE
+                )
+            """))
+        
+        # workflow_vorlage_item_dependencies – new table for template-level dependency rules
+        if "workflow_vorlage_item_dependencies" not in tables:
+            conn.execute(text("""
+                CREATE TABLE workflow_vorlage_item_dependencies (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    vorlage_id INTEGER NOT NULL,
+                    source_item_id INTEGER NOT NULL,
+                    target_item_id INTEGER NOT NULL,
+                    typ TEXT NOT NULL,
+                    beschreibung TEXT,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (vorlage_id) REFERENCES workflow_vorlagen(id) ON DELETE CASCADE,
+                    FOREIGN KEY (source_item_id) REFERENCES workflow_vorlage_items(id) ON DELETE CASCADE,
+                    FOREIGN KEY (target_item_id) REFERENCES workflow_vorlage_items(id) ON DELETE CASCADE
+                )
+            """))
+        
+        # workflow_vorlage_items – add phase_id column (optional, references new phase)
+        vli_cols = {col['name'] for col in inspector.get_columns('workflow_vorlage_items')}
+        if "phase_id" not in vli_cols:
+            conn.execute(text("""
+                ALTER TABLE workflow_vorlage_items ADD COLUMN phase_id INTEGER
+                REFERENCES workflow_phasen(id) ON DELETE SET NULL
+            """))
+        
+        # workflow_items – add phase_id and blockage tracking columns
+        item_cols = {col['name'] for col in inspector.get_columns('workflow_items')}
+        if "phase_id" not in item_cols:
+            conn.execute(text("""
+                ALTER TABLE workflow_items ADD COLUMN phase_id INTEGER
+                REFERENCES workflow_phasen(id) ON DELETE SET NULL
+            """))
+        if "blockiert_von_item_ids" not in item_cols:
+            conn.execute(text("""
+                ALTER TABLE workflow_items ADD COLUMN blockiert_von_item_ids TEXT DEFAULT '[]'
+            """))
+        if "blockierung_seit" not in item_cols:
+            conn.execute(text("""
+                ALTER TABLE workflow_items ADD COLUMN blockierung_seit DATETIME
+            """))
+
         conn.commit()

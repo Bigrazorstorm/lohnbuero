@@ -179,6 +179,32 @@ class WorkflowSchrittEbene(str, enum.Enum):
     GLOBAL_EVENT = "global_event"   # Globales Event (z.B. Jahreswechsel)
 
 
+class WorkflowItemStatus(str, enum.Enum):
+    """Detaillierter Status für Workflow-Items mit Phasen."""
+    OFFEN = "offen"                          # Bereit zur Bearbeitung
+    BLOCKIERT = "blockiert"                  # Wartet auf andere Items
+    IN_BEARBEITUNG = "in_bearbeitung"        # Aktiv bearbeitet
+    FERTIG = "fertig"                        # Abgeschlossen + System updated
+    IN_BEARBEITUNG_BLOCKIERT = "in_bearbeitung_blockiert"  # Hybrid: teils blockiert, teils gemacht
+    UEBERSPRUNGEN = "uebersprungen"          # Bewusst übersprungen (optional)
+
+
+class WorkflowItemDependencyTyp(str, enum.Enum):
+    """Typ der Abhängigkeit zwischen Items."""
+    BLOCKIERT_VON = "blockiert_von"          # Target ist blockiert bis Source fertig
+    MUSS_VOR = "muss_vor"                    # Source muss vor Target erledigt sein (historisch)
+    PARALLEL_OK = "parallel_ok"              # Können parallel laufen (aber sequenziell aufgelistet)
+    OPTIONAL_NACH = "optional_nach"          # Target optional, aber sollte nach Source kommen
+
+
+class StichtabCategory(str, enum.Enum):
+    """Kategorien für Stichtage zur besseren Verwaltung."""
+    ZAHLSTAG = "zahlstag"                    # Lohnzahltag, Steuerzahlung, SV-Zahlung
+    MELDUNG = "meldung"                      # Meldepflicht (DEÜV, Statistik, etc.)
+    INTERN = "intern"                        # Interne Deadline (Prüfung, Freigabe)
+    VORBEREITUNG = "vorbereitung"           # Vorbereitung auf externen Stichtag
+
+
 # ─────────────────────────────────────────
 # Tenant (Multi-Tenancy-Unterstützung)
 # ─────────────────────────────────────────
@@ -599,7 +625,35 @@ class WorkflowVorlage(Base):
     
     branche = relationship("Branche", back_populates="workflow_vorlagen", foreign_keys=[branche_id])
     items = relationship("WorkflowVorlageItem", back_populates="vorlage", order_by="WorkflowVorlageItem.position", cascade="all, delete-orphan")
+    phasen = relationship("WorkflowPhase", back_populates="vorlage", order_by="WorkflowPhase.position", cascade="all, delete-orphan")
+    item_dependencies = relationship("WorkflowVorlageItemDependency", back_populates="vorlage", cascade="all, delete-orphan")
     instanzen = relationship("WorkflowInstanz", back_populates="vorlage")
+
+
+class WorkflowPhase(Base):
+    """Phasen im Workflow - strukturiert den Ablauf in logische Abschnitte."""
+    __tablename__ = "workflow_phasen"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    vorlage_id = Column(Integer, ForeignKey("workflow_vorlagen.id"), nullable=False)
+    position = Column(Integer, nullable=False)  # 1=Dateneingang, 2=Prüfung, etc.
+    name = Column(String(255), nullable=False)  # z.B. "Dateneingang"
+    beschreibung = Column(Text, nullable=True)
+    
+    # Icon/Category für Frontend
+    icon = Column(String(50), nullable=True)  # z.B. "inbox", "check", "send"
+    
+    # Standardtermine (Tag des Monats, z.B. "5" = 5. des Monats)
+    # Kann pro Branche overridden werden
+    standard_frist_tag = Column(Integer, nullable=True)  # 1-31, None = flexibel
+    
+    # Ist das eine Kernprozess-Phase? (zentraler Fortschritt)
+    ist_kernprozess = Column(Boolean, default=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    vorlage = relationship("WorkflowVorlage", back_populates="phasen")
+    items = relationship("WorkflowVorlageItem", back_populates="phase")
 
 
 class WorkflowVorlageItem(Base):
@@ -607,6 +661,7 @@ class WorkflowVorlageItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     vorlage_id = Column(Integer, ForeignKey("workflow_vorlagen.id"), nullable=False)
+    phase_id = Column(Integer, ForeignKey("workflow_phasen.id"), nullable=True)  # NEW: Phase Link
     position = Column(Integer, nullable=False)
     titel = Column(String(255), nullable=False)
     beschreibung = Column(Text)
@@ -640,6 +695,31 @@ class WorkflowVorlageItem(Base):
     blockier_konfiguration = Column(Text, nullable=True)
 
     vorlage = relationship("WorkflowVorlage", back_populates="items")
+    phase = relationship("WorkflowPhase", back_populates="items")
+    dependencies_from = relationship("WorkflowVorlageItemDependency", foreign_keys="WorkflowVorlageItemDependency.source_item_id", back_populates="source_item")
+    dependencies_to = relationship("WorkflowVorlageItemDependency", foreign_keys="WorkflowVorlageItemDependency.target_item_id", back_populates="target_item")
+
+
+class WorkflowVorlageItemDependency(Base):
+    """Abhängigkeiten zwischen Items einer Vorlage (definierten Blockierungsregeln)."""
+    __tablename__ = "workflow_vorlage_item_dependencies"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    vorlage_id = Column(Integer, ForeignKey("workflow_vorlagen.id"), nullable=False)
+    source_item_id = Column(Integer, ForeignKey("workflow_vorlage_items.id"), nullable=False)  # Item das fertig sein muss
+    target_item_id = Column(Integer, ForeignKey("workflow_vorlage_items.id"), nullable=False)  # Item das blockiert ist
+    
+    # Typ der Abhängigkeit
+    typ = Column(Enum(WorkflowItemDependencyTyp), default=WorkflowItemDependencyTyp.BLOCKIERT_VON)
+    
+    # Optionale Beschreibung
+    beschreibung = Column(Text, nullable=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    
+    vorlage = relationship("WorkflowVorlage", back_populates="item_dependencies")
+    source_item = relationship("WorkflowVorlageItem", foreign_keys=[source_item_id], back_populates="dependencies_from")
+    target_item = relationship("WorkflowVorlageItem", foreign_keys=[target_item_id], back_populates="dependencies_to")
 
 
 # ─────────────────────────────────────────
@@ -735,6 +815,7 @@ class WorkflowItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     instanz_id = Column(Integer, ForeignKey("workflow_instanzen.id"), nullable=False)
     vorlage_item_id = Column(Integer, ForeignKey("workflow_vorlage_items.id"), nullable=True)
+    phase_id = Column(Integer, ForeignKey("workflow_phasen.id"), nullable=True)  # NEW: Link zur Phase
     position = Column(Integer, nullable=False)
     
     # Task details
@@ -756,16 +837,16 @@ class WorkflowItem(Base):
     erfordert_pruefung = Column(Boolean, default=False)  # 4-eyes principle
     fristart_referenz = Column(String(100), nullable=True)  # links to deadline rule
 
-    # Status & completion
-    status = Column(Enum(ChecklistItemStatus), default=ChecklistItemStatus.OFFEN)
+    # Status & completion - NEW: erweitert für Phase-System
+    status = Column(Enum(WorkflowItemStatus), default=WorkflowItemStatus.OFFEN)
     erledigt_am = Column(DateTime, nullable=True)
     erledigt_von_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     started_at = Column(DateTime, nullable=True)  # when work actually started
     actual_duration_minuten = Column(Integer, nullable=True)  # actual time spent
     
-    # Blocking management
-    ist_blockiert = Column(Boolean, default=False)
-    blockiert_grund = Column(String(255), nullable=True)  # e.g. "Wartet auf Ticket #12"
+    # Blocking management - NEW: Liste von blockierenden Item-IDs
+    blockiert_von_item_ids = Column(Text, nullable=True)  # JSON: [item_id, ...]
+    blockiert_grund = Column(String(255), nullable=True)  # e.g. "Wartet auf Item #12"
     blockierung_seit = Column(DateTime, nullable=True)
     
     # Dependencies

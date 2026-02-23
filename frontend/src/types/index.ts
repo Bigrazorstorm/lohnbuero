@@ -125,6 +125,15 @@ export type Ampelstatus = 'gruen' | 'gelb' | 'rot'
 
 export type ChecklistItemStatus = 'offen' | 'erledigt' | 'uebersprungen' | 'blockiert'
 
+// NEW (v2.1): Enhanced workflow item status
+export type WorkflowItemStatus =
+  | 'offen'
+  | 'blockiert'
+  | 'in_bearbeitung'
+  | 'fertig'
+  | 'in_bearbeitung_blockiert'
+  | 'uebersprungen'
+
 export interface WorkflowItem {
   id: number
   instanz_id: number
@@ -137,10 +146,14 @@ export interface WorkflowItem {
   erfordert_dokument: boolean
   erfordert_pruefung: boolean
   status: ChecklistItemStatus
+  phase_id?: number // NEW (v2.1): Phase assignment
   erledigt_am?: string
   erledigt_von?: UserShort
   notiz?: string
   blocker_von?: number // ID of blocking item
+  blockiert_von_item_ids?: number[] // NEW (v2.1): List of blocking item IDs
+  blockiert_grund?: string // NEW (v2.1): Reason for blockage
+  blockierung_seit?: string // NEW (v2.1): When blockage started
   punkte?: number
 }
 
@@ -339,6 +352,38 @@ export interface WorkflowVorlageItem {
   ist_optional_pro_mandant: boolean
   erfordert_dokument: boolean
   erfordert_pruefung: boolean
+  phase_id?: number // NEW (v2.1): Phase assignment
+}
+
+// NEW (v2.1): Workflow Phase for organized workflow structure
+export interface WorkflowPhase {
+  id: number
+  vorlage_id: number
+  position: number
+  name: string
+  icon?: string
+  standard_frist_tag?: number // e.g., 5 = 5th of month
+  ist_kernprozess: boolean
+  created_at: string
+  updated_at: string
+}
+
+// NEW (v2.1): Dependency type enumeration
+export type WorkflowItemDependencyTyp =
+  | 'blockiert_von'
+  | 'muss_vor'
+  | 'parallel_ok'
+  | 'optional_nach'
+
+// NEW (v2.1): Dependency between workflow items
+export interface WorkflowVorlageItemDependency {
+  id: number
+  vorlage_id: number
+  source_item_id: number
+  target_item_id: number
+  typ: WorkflowItemDependencyTyp
+  beschreibung?: string
+  created_at: string
 }
 
 export interface WorkflowVorlage {
@@ -350,7 +395,56 @@ export interface WorkflowVorlage {
   ist_onboarding: boolean
   erstellt_von_id?: number
   created_at: string
+  phasen?: WorkflowPhase[] // NEW (v2.1): Phases in this template
   items: WorkflowVorlageItem[]
+  item_dependencies?: WorkflowVorlageItemDependency[] // NEW (v2.1): Dependencies
+}
+
+// NEW (v2.1): Dependency graph for visualization
+export interface DependencyGraphNode {
+  id: number
+  label: string
+  position: number
+  phase_id?: number
+  ist_kernprozess: boolean
+  ist_pflicht: boolean
+}
+
+export interface DependencyGraphEdge {
+  source: number
+  target: number
+  type: WorkflowItemDependencyTyp
+  beschreibung?: string
+}
+
+export interface DependencyGraph {
+  nodes: DependencyGraphNode[]
+  edges: DependencyGraphEdge[]
+  phases: WorkflowPhase[]
+}
+
+// NEW (v2.1): Blockage information
+export interface ItemBlockageInfo {
+  is_blocked: boolean
+  blocker_items: Array<{
+    id: number
+    titel: string
+    status: ChecklistItemStatus
+    erledigt_am?: string
+    faellig_datum?: string
+  }>
+  blockage_reason: string
+}
+
+// NEW (v2.1): Blocked item summary
+export interface BlockedItemSummary {
+  id: number
+  position: number
+  titel: string
+  blockiert_von_item_ids: number[]
+  blockiert_grund?: string
+  blockierung_seit?: string
+  status: ChecklistItemStatus
 }
 
 // ── Audit Log ──────────────────────────────────────────────

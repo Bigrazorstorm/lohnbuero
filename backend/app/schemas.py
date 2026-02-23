@@ -7,6 +7,7 @@ from app.models import (
     Ampelstatus, ChecklistItemStatus, TicketStatus, TicketPrioritaet,
     EskalationStufe, EmailLogStatus, FristenRegeltyp, SonderaufgabeStatus,
     MandantKontaktRolle, GlobalEventTyp, WorkflowSchrittEbene, WorkflowSchrittTyp,
+    WorkflowItemStatus, WorkflowItemDependencyTyp, StichtabCategory,
 )
 
 # ─────────────────────────────────────────
@@ -518,7 +519,69 @@ class MandantNotizOut(MandantNotizBase):
     model_config = {"from_attributes": True}
 
 
-# ─────────────────────────────────────────# Workflow Vorlage
+# ─────────────────────────────────────────
+# Workflow Phase
+# ─────────────────────────────────────────
+
+class WorkflowPhaseBase(BaseModel):
+    position: int
+    name: str
+    icon: Optional[str] = None
+    standard_frist_tag: Optional[int] = None
+    ist_kernprozess: bool = False
+
+
+class WorkflowPhaseCreate(WorkflowPhaseBase):
+    pass
+
+
+class WorkflowPhaseUpdate(BaseModel):
+    position: Optional[int] = None
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    standard_frist_tag: Optional[int] = None
+    ist_kernprozess: Optional[bool] = None
+
+
+class WorkflowPhaseOut(WorkflowPhaseBase):
+    id: int
+    vorlage_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Workflow Item Dependency
+# ─────────────────────────────────────────
+
+class WorkflowVorlageItemDependencyBase(BaseModel):
+    source_item_id: int
+    target_item_id: int
+    typ: WorkflowItemDependencyTyp
+    beschreibung: Optional[str] = None
+
+
+class WorkflowVorlageItemDependencyCreate(WorkflowVorlageItemDependencyBase):
+    pass
+
+
+class WorkflowVorlageItemDependencyUpdate(BaseModel):
+    typ: Optional[WorkflowItemDependencyTyp] = None
+    beschreibung: Optional[str] = None
+
+
+class WorkflowVorlageItemDependencyOut(WorkflowVorlageItemDependencyBase):
+    id: int
+    vorlage_id: int
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Workflow Vorlage
 # ─────────────────────────────────────────
 
 class WorkflowVorlageItemBase(BaseModel):
@@ -544,6 +607,7 @@ class WorkflowVorlageItemCreate(WorkflowVorlageItemBase):
 class WorkflowVorlageItemOut(WorkflowVorlageItemBase):
     id: int
     vorlage_id: int
+    phase_id: Optional[int] = None
 
     model_config = {"from_attributes": True}
 
@@ -571,7 +635,9 @@ class WorkflowVorlageOut(WorkflowVorlageBase):
     id: int
     erstellt_von_id: Optional[int] = None
     created_at: datetime
+    phasen: List[WorkflowPhaseOut] = []
     items: List[WorkflowVorlageItemOut] = []
+    item_dependencies: List[WorkflowVorlageItemDependencyOut] = []
 
     model_config = {"from_attributes": True}
 
@@ -635,6 +701,7 @@ class WorkflowItemOut(BaseModel):
     erfordert_pruefung: bool
     fristart_referenz: Optional[str] = None
     status: ChecklistItemStatus
+    phase_id: Optional[int] = None
     erledigt_am: Optional[datetime] = None
     erledigt_von: Optional[UserShort] = None
     started_at: Optional[datetime] = None
@@ -643,6 +710,7 @@ class WorkflowItemOut(BaseModel):
     punkte: float = 0.0
     ist_blockiert: bool = False
     blockiert_grund: Optional[str] = None
+    blockiert_von_item_ids: Optional[List[int]] = None
     blockierung_seit: Optional[datetime] = None
     ist_ueberfaellig: bool = False
     created_at: datetime

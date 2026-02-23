@@ -18,6 +18,7 @@ from enum import Enum
 from sqlalchemy.orm import Session
 from app.models import (
     WorkflowInstanz, WorkflowItem, WorkflowVorlage, WorkflowVorlageItem,
+    WorkflowPhase, WorkflowVorlageItemDependency,
     Branche, BrancheFristenprofil, BrancheFrist, Mandant,
     ChecklistItemStatus, WorkflowStatus, Ampelstatus, 
     FristenRegeltyp, WorkflowSchrittTyp, TicketPrioritaet, 
@@ -272,6 +273,172 @@ class WorkflowService:
         self.db.flush()
         return unblocked_ids
     
+    def _apply_phase_structure(self, instanz: WorkflowInstanz) -> None:
+        """
+        Assign phase_id to each workflow item based on template phase assignments.
+        NEW (v2.1): Phase-based workflow organization.
+        """
+        if not instanz.vorlage or not instanz.vorlage.phasen:
+            return
+        
+        # Build mapping: vorlage_item_id -> phase_id
+        phase_mapping = {}
+        for phase in instanz.vorlage.phasen:
+            for item in phase.items:
+                phase_mapping[item.id] = phase.id
+        
+        # Assign phases to instance items
+        for item in instanz.items:
+            if item.vorlage_item_id and item.vorlage_item_id in phase_mapping:
+                item.phase_id = phase_mapping[item.vorlage_item_id]
+        
+        self.db.flush()
+    
+    def _resolve_item_dependencies_v2(self, instanz: WorkflowInstanz) -> None:
+        """
+        Resolve template-level dependencies (WorkflowVorlageItemDependency)
+        and apply blockages to instance items at runtime.
+        NEW (v2.1): Explicit dependency model with typed relationships.
+        
+        Updates blockiert_von_item_ids for each item based on:
+        - BLOCKIERT_VON: target item is blocked until source is FERTIG
+        - MUSS_VOR: source must complete before target can be marked complete
+        - PARALLEL_OK: can run in parallel
+        - OPTIONAL_NACH: target is optional after source is done
+        """
+        if not instanz.vorlage or not instanz.vorlage.item_dependencies:
+            return
+        
+        # Build mapping: vorlage_item_id -> instance item
+        vorlage_item_to_instance = {}
+        for item in instanz.items:
+            if item.vorlage_item_id:
+                vorlage_item_to_instance[item.vorlage_item_id] = item
+        
+        # Apply blocking relationships
+        for dep in instanz.vorlage.item_dependencies:
+            source_item = vorlage_item_to_instance.get(dep.source_item_id)
+            target_item = vorlage_item_to_instance.get(dep.target_item_id)
+            
+            if not source_item or not target_item:
+                continue
+            
+            # Only process BLOCKIERT_VON relationships for runtime blocking
+            if dep.typ.value == "blockiert_von":
+                # target is blocked by source
+                current_blockers = json.loads(target_item.blockiert_von_item_ids or "[]")
+                if source_item.id not in current_blockers:
+                    current_blockers.append(source_item.id)
+                    target_item.blockiert_von_item_ids = json.dumps(current_blockers)
+                    target_item.ist_blockiert = True
+                    target_item.blockiert_grund = f"Wartet auf Abschluss von: {source_item.titel}"
+                    target_item.blockierung_seit = datetime.utcnow()
+        
+        self.db.flush()
+    
+    def _calculate_phase_deadlines(self, instanz: WorkflowInstanz, mandant: Mandant) -> None:
+        """
+        Calculate phase-level deadlines based on standard_frist_tag.
+        NEW (v2.1): Each phase has an optional standard deadline.
+        
+        If standard_frist_tag is set (e.g., 5 = 5th of month), items in the phase
+        default to that deadline unless they have explicit vorlage_item deadline.
+        """
+        if not instanz.vorlage or not instanz.vorlage.phasen:
+            return
+        
+        month_start = datetime(instanz.jahr, instanz.monat, 1)
+        
+        for phase in instanz.vorlage.phasen:
+            if not phase.standard_frist_tag:
+                continue
+            
+            phase_deadline = month_start + timedelta(days=phase.standard_frist_tag)
+            
+            # Apply to items in this phase that don't have explicit deadlines
+            for item in instanz.items:
+                if item.phase_id == phase.id and not item.faellig_datum:
+                    item.faellig_datum = phase_deadline
+                    # Calculate SLA warning
+                    branche_profil = self._get_branche_profil(instanz, mandant)
+                    if branche_profil and branche_profil.branche:
+                        warning_days = branche_profil.branche.sla_warnung_tage or 2
+                        item.sla_warnung_ab = phase_deadline - timedelta(days=warning_days)
+        
+        self.db.flush()
+    
+    def _unblock_dependent_items_v2(self, completed_item: WorkflowItem) -> List[int]:
+        """
+        When an item is completed, unblock any items that were blocked by it.
+        NEW (v2.1): Uses new blockiert_von_item_ids JSON array.
+        
+        Returns: List of newly unblocked item IDs
+        """
+        unblocked_ids = []
+        
+        # Find all items in the same instance that have this item in their blockiert_von list
+        dependent_items = self.db.query(WorkflowItem).filter(
+            WorkflowItem.instanz_id == completed_item.instanz_id,
+            WorkflowItem.ist_blockiert == True,
+        ).all()
+        
+        for item in dependent_items:
+            if not item.blockiert_von_item_ids:
+                continue
+            
+            blockers = json.loads(item.blockiert_von_item_ids)
+            if completed_item.id in blockers:
+                blockers.remove(completed_item.id)
+                if len(blockers) == 0:
+                    # All blockers are now complete
+                    item.ist_blockiert = False
+                    item.blockiert_von_item_ids = json.dumps([])
+                    item.blockiert_grund = None
+                    item.blockierung_seit = None
+                    unblocked_ids.append(item.id)
+                else:
+                    # Still has other blockers
+                    item.blockiert_von_item_ids = json.dumps(blockers)
+                    # Update grund to reflect remaining blockers
+                    remaining_titles = []
+                    for blocker_id in blockers:
+                        blocker = self.db.query(WorkflowItem).filter(
+                            WorkflowItem.id == blocker_id
+                        ).first()
+                        if blocker:
+                            remaining_titles.append(blocker.titel)
+                    if remaining_titles:
+                        item.blockiert_grund = f"Wartet auf Abschluss von: {', '.join(remaining_titles)}"
+        
+        self.db.flush()
+        return unblocked_ids
+    
+    def _check_item_blockages(self, item: WorkflowItem) -> Tuple[bool, List[int]]:
+        """
+        Check if an item is currently blocked and by which items.
+        NEW (v2.1): Uses new blockiert_von_item_ids JSON array.
+        
+        Returns: (is_blocked, list_of_blocker_ids)
+        """
+        if not item.blockiert_von_item_ids:
+            return False, []
+        
+        try:
+            blocker_ids = json.loads(item.blockiert_von_item_ids)
+        except (json.JSONDecodeError, TypeError):
+            return False, []
+        
+        # Filter to only incomplete blockers
+        incomplete_blockers = []
+        for blocker_id in blocker_ids:
+            blocker = self.db.query(WorkflowItem).filter(
+                WorkflowItem.id == blocker_id
+            ).first()
+            if blocker and blocker.status != ChecklistItemStatus.ERLEDIGT:
+                incomplete_blockers.append(blocker_id)
+        
+        return len(incomplete_blockers) > 0, incomplete_blockers
+    
     # ═══════════════════════════════════════════════════════════════
     # SLA MANAGEMENT
     # ═══════════════════════════════════════════════════════════════
@@ -372,6 +539,12 @@ class WorkflowService:
         
         # Re-calculate positions after adding all steps
         self._recalculate_positions(instanz)
+        
+        # NEW (v2.1): Apply phase structure and resolve dependencies
+        if vorlage:
+            self._apply_phase_structure(instanz)
+            self._resolve_item_dependencies_v2(instanz)
+            self._calculate_phase_deadlines(instanz, mandant)
         
         # Calculate SLA deadline
         instanz.sla_deadline = self.calculate_sla_deadline(instanz, mandant)
