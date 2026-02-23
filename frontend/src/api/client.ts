@@ -239,6 +239,7 @@ export const reportingApi = {
     api.get('/reporting/export/csv', { params, responseType: 'blob' }),
   exportExcel: (params?: Record<string, unknown>) =>
     api.get('/reporting/export/excel', { params, responseType: 'blob' }),
+}
 
 export const ticketAnhangApi = {
   upload: (ticketId: number, formData: FormData) =>
