@@ -11,10 +11,23 @@ from app.routers import fristen, schritt_typen, reporting
 from app.models import User
 
 # Create all tables (new ones)
-Base.metadata.create_all(bind=engine)
+try:
+    print("Creating database tables...")
+    Base.metadata.create_all(bind=engine)
+    print("✓ Database tables created")
+except Exception as e:
+    print(f"✗ Error creating tables: {e}")
+    raise
 
 # Safely migrate existing tables (add new columns)
-run_migrations()
+try:
+    print("Running migrations...")
+    run_migrations()
+    print("✓ Migrations complete")
+except Exception as e:
+    print(f"✗ Error during migrations: {e}")
+    import traceback
+    traceback.print_exc()
 
 # Auto-seed the database on startup if it's empty
 def seed_demo_data():
@@ -22,9 +35,17 @@ def seed_demo_data():
     db = SessionLocal()
     try:
         if db.query(User).count() == 0:
+            print("Seeding demo data...")
             from seed import seed
             db.close()
             seed()
+            print("✓ Demo data seeded")
+        else:
+            print("✓ Database already has data")
+    except Exception as e:
+        print(f"✗ Error seeding demo data: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         try:
             db.close()
@@ -35,11 +56,18 @@ seed_demo_data()
 
 # Seed system defaults (idempotent – only adds missing entries)
 def seed_system_defaults():
+    """Seed system defaults like branches, payment methods, etc."""
     from app.seed_defaults import seed_all_defaults
     db = SessionLocal()
     try:
+        print("Seeding system defaults...")
         seed_all_defaults(db)
         db.commit()
+        print("✓ System defaults seeded")
+    except Exception as e:
+        print(f"✗ Error seeding defaults: {e}")
+        import traceback
+        traceback.print_exc()
     finally:
         db.close()
 

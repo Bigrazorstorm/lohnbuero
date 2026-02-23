@@ -12,16 +12,16 @@ from app.models import (
 
 
 DEFAULT_BRANCHEN = [
-    {"name": "Baugewerbe", "faktor": 1.3, "soka_relevant": True, "tags": '["SOKA-BAU","Bauhauptgewerbe"]'},
-    {"name": "Gastronomie", "faktor": 1.1, "soka_relevant": False, "tags": '["Minijobs","Trinkgeld"]'},
-    {"name": "Handwerk", "faktor": 1.0, "soka_relevant": False, "tags": '["Innungen"]'},
-    {"name": "Einzelhandel", "faktor": 0.9, "soka_relevant": False, "tags": '["Teilzeit"]'},
-    {"name": "IT / Software", "faktor": 1.0, "soka_relevant": False, "tags": '["bAV","Sachbezüge"]'},
-    {"name": "Gesundheitswesen", "faktor": 1.2, "soka_relevant": False, "tags": '["Schichtarbeit","Zuschläge"]'},
-    {"name": "Logistik / Transport", "faktor": 1.1, "soka_relevant": False, "tags": '["Spesen","Fernfahrer"]'},
-    {"name": "Produktion / Industrie", "faktor": 1.1, "soka_relevant": False, "tags": '["Schichtmodelle","Tarif"]'},
-    {"name": "Dienstleistung", "faktor": 1.0, "soka_relevant": False, "tags": '[]'},
-    {"name": "Öffentlicher Dienst", "faktor": 1.2, "soka_relevant": False, "tags": '["TVöD","Zusatzversorgung"]'},
+    {"name": "Baugewerbe", "typ": "bauwirtschaft", "faktor": 1.3, "soka_relevant": True, "tags": '["SOKA-BAU","Bauhauptgewerbe"]'},
+    {"name": "Gastronomie", "typ": "dienstleistungen", "faktor": 1.1, "soka_relevant": False, "tags": '["Minijobs","Trinkgeld"]'},
+    {"name": "Handwerk", "typ": "handwerk", "faktor": 1.0, "soka_relevant": False, "tags": '["Innungen"]'},
+    {"name": "Einzelhandel", "typ": "handel", "faktor": 0.9, "soka_relevant": False, "tags": '["Teilzeit"]'},
+    {"name": "IT / Software", "typ": "dienstleistungen", "faktor": 1.0, "soka_relevant": False, "tags": '["bAV","Sachbezüge"]'},
+    {"name": "Gesundheitswesen", "typ": "gesundheit", "faktor": 1.2, "soka_relevant": False, "tags": '["Schichtarbeit","Zuschläge"]'},
+    {"name": "Logistik / Transport", "typ": "dienstleistungen", "faktor": 1.1, "soka_relevant": False, "tags": '["Spesen","Fernfahrer"]'},
+    {"name": "Produktion / Industrie", "typ": "industrie", "faktor": 1.1, "soka_relevant": False, "tags": '["Schichtmodelle","Tarif"]'},
+    {"name": "Dienstleistung", "typ": "dienstleistungen", "faktor": 1.0, "soka_relevant": False, "tags": '[]'},
+    {"name": "Öffentlicher Dienst", "typ": "sonstige", "faktor": 1.2, "soka_relevant": False, "tags": '["TVöD","Zusatzversorgung"]'},
 ]
 
 DEFAULT_AUSGABEWEGE = [

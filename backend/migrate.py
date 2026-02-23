@@ -27,52 +27,58 @@ def get_table_columns(inspector, table_name):
 def migrate():
     engine = create_engine(get_database_url())
     
-    with engine.connect() as conn:
-        inspector = inspect(engine)
+    try:
+        with engine.connect() as conn:
+            inspector = inspect(engine)
+            
+            # --- mandanten table ---
+            if table_exists(inspector, 'mandanten'):
+                mandanten_columns = get_table_columns(inspector, 'mandanten')
+                
+                if 'workflow_konfiguration' not in mandanten_columns:
+                    print("Adding workflow_konfiguration column to mandanten...")
+                    conn.execute(text(
+                        "ALTER TABLE mandanten ADD COLUMN workflow_konfiguration TEXT"
+                    ))
+                    conn.commit()
+                    print("  ✓ Added workflow_konfiguration")
+                else:
+                    print("  ✓ workflow_konfiguration already exists")
+            else:
+                print("  ℹ mandanten table does not exist yet (will be created on app startup)")
+            
+            # --- workflow_vorlage_items table ---
+            if table_exists(inspector, 'workflow_vorlage_items'):
+                vorlage_items_columns = get_table_columns(inspector, 'workflow_vorlage_items')
+                
+                if 'ist_kernprozess' not in vorlage_items_columns:
+                    print("Adding ist_kernprozess column to workflow_vorlage_items...")
+                    conn.execute(text(
+                        "ALTER TABLE workflow_vorlage_items ADD COLUMN ist_kernprozess BOOLEAN DEFAULT FALSE"
+                    ))
+                    conn.commit()
+                    print("  ✓ Added ist_kernprozess")
+                else:
+                    print("  ✓ ist_kernprozess already exists")
+                
+                if 'ist_optional_pro_mandant' not in vorlage_items_columns:
+                    print("Adding ist_optional_pro_mandant column to workflow_vorlage_items...")
+                    conn.execute(text(
+                        "ALTER TABLE workflow_vorlage_items ADD COLUMN ist_optional_pro_mandant BOOLEAN DEFAULT FALSE"
+                    ))
+                    conn.commit()
+                    print("  ✓ Added ist_optional_pro_mandant")
+                else:
+                    print("  ✓ ist_optional_pro_mandant already exists")
+            else:
+                print("  ℹ workflow_vorlage_items table does not exist yet (will be created on app startup)")
         
-        # --- mandanten table ---
-        if table_exists(inspector, 'mandanten'):
-            mandanten_columns = get_table_columns(inspector, 'mandanten')
-            
-            if 'workflow_konfiguration' not in mandanten_columns:
-                print("Adding workflow_konfiguration column to mandanten...")
-                conn.execute(text(
-                    "ALTER TABLE mandanten ADD COLUMN workflow_konfiguration TEXT"
-                ))
-                conn.commit()
-                print("  ✓ Added workflow_konfiguration")
-            else:
-                print("  ✓ workflow_konfiguration already exists")
-        else:
-            print("  ℹ mandanten table does not exist yet (will be created on app startup)")
-        
-        # --- workflow_vorlage_items table ---
-        if table_exists(inspector, 'workflow_vorlage_items'):
-            vorlage_items_columns = get_table_columns(inspector, 'workflow_vorlage_items')
-            
-            if 'ist_kernprozess' not in vorlage_items_columns:
-                print("Adding ist_kernprozess column to workflow_vorlage_items...")
-                conn.execute(text(
-                    "ALTER TABLE workflow_vorlage_items ADD COLUMN ist_kernprozess BOOLEAN DEFAULT FALSE"
-                ))
-                conn.commit()
-                print("  ✓ Added ist_kernprozess")
-            else:
-                print("  ✓ ist_kernprozess already exists")
-            
-            if 'ist_optional_pro_mandant' not in vorlage_items_columns:
-                print("Adding ist_optional_pro_mandant column to workflow_vorlage_items...")
-                conn.execute(text(
-                    "ALTER TABLE workflow_vorlage_items ADD COLUMN ist_optional_pro_mandant BOOLEAN DEFAULT FALSE"
-                ))
-                conn.commit()
-                print("  ✓ Added ist_optional_pro_mandant")
-            else:
-                print("  ✓ ist_optional_pro_mandant already exists")
-        else:
-            print("  ℹ workflow_vorlage_items table does not exist yet (will be created on app startup)")
-    
-    print("\n✅ Migration check complete!")
+        print("\n✅ Migration check complete!")
+    except Exception as e:
+        print(f"✗ Migration error: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 if __name__ == '__main__':
