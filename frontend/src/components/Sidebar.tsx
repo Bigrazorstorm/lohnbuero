@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Users, Briefcase, CheckSquare, MessageSquare,
-  FileText, Building2, Shield, Mail, Database, Server, Zap
+  FileText, Building2, Shield, Mail, Database, Server, Zap, GitBranch
 } from 'lucide-react'
 import { useAuthStore } from '../store/auth'
 
@@ -16,6 +16,7 @@ const navItems = [
   { to: '/admin/stammdaten', label: 'Stammdaten', icon: Database, roles: ['admin'] },
   { to: '/admin/global-events', label: 'Global Events', icon: Zap, roles: ['admin'] },
   { to: '/admin/branche-schritte', label: 'Branche Schritte', icon: CheckSquare, roles: ['admin'] },
+  { to: '/admin/prozess-designer', label: 'Prozessdesigner', icon: GitBranch, roles: ['admin'] },
   { to: '/admin/tenants', label: 'Tenants', icon: Building2, roles: ['admin'] },
   { to: '/admin/mail', label: 'Mail-Konfiguration', icon: Server, roles: ['admin'] },
   { to: '/audit', label: 'Audit-Log', icon: Shield, roles: ['admin', 'teamleitung'] },

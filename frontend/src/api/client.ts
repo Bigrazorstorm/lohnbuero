@@ -226,6 +226,30 @@ export const adminApi = {
     api.delete(`/admin/branchen-workflow-schritte/${id}`),
 }
 
+// ── Prozessdesigner API ───────────────────────
+export const prozessDesignerApi = {
+  listVorlagen: () =>
+    api.get('/admin/prozess-designer/vorlagen'),
+  getGraph: (vorlageId: number) =>
+    api.get(`/admin/prozess-designer/${vorlageId}`),
+  updateItemPosition: (itemId: number, pos_x: number, pos_y: number) =>
+    api.patch(`/admin/prozess-designer/items/${itemId}/position`, { pos_x, pos_y }),
+  createEdge: (vorlageId: number, sourceId: number, targetId: number, typ = 'blockiert_von', beschreibung?: string) =>
+    api.post(`/admin/prozess-designer/${vorlageId}/edges`, null, {
+      params: { source_item_id: sourceId, target_item_id: targetId, typ, beschreibung },
+    }),
+  deleteEdge: (edgeId: number) =>
+    api.delete(`/admin/prozess-designer/edges/${edgeId}`),
+  listChecklisten: (itemId: number, nurAktive = true) =>
+    api.get(`/admin/prozess-designer/items/${itemId}/checklisten`, { params: { nur_aktive: nurAktive } }),
+  createChecklistItem: (itemId: number, data: unknown) =>
+    api.post(`/admin/prozess-designer/items/${itemId}/checklisten`, data),
+  updateChecklistItem: (checklistId: number, data: unknown) =>
+    api.patch(`/admin/prozess-designer/checklisten/${checklistId}`, data),
+  deleteChecklistItem: (checklistId: number) =>
+    api.delete(`/admin/prozess-designer/checklisten/${checklistId}`),
+}
+
 // ── Fristen API ───────────────────────────────
 export const fristenApi = {
   listProfiles: (mandantId?: number) =>

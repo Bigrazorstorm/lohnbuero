@@ -581,6 +581,49 @@ class WorkflowVorlageItemDependencyOut(WorkflowVorlageItemDependencyBase):
 
 
 # ─────────────────────────────────────────
+# Prozessdesigner: Checklist items per step
+# (defined here so WorkflowVorlageItemOut can reference it)
+# ─────────────────────────────────────────
+
+class ProzessSchrittChecklistItemBase(BaseModel):
+    titel: str
+    beschreibung: Optional[str] = None
+    position: int = 1
+    ist_pflicht: bool = True
+    ist_aktiv: bool = True
+
+
+class ProzessSchrittChecklistItemCreate(ProzessSchrittChecklistItemBase):
+    pass
+
+
+class ProzessSchrittChecklistItemUpdate(BaseModel):
+    titel: Optional[str] = None
+    beschreibung: Optional[str] = None
+    position: Optional[int] = None
+    ist_pflicht: Optional[bool] = None
+    ist_aktiv: Optional[bool] = None
+
+
+class ProzessSchrittChecklistItemOut(ProzessSchrittChecklistItemBase):
+    id: int
+    vorlage_item_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Prozessdesigner: Node position update
+# ─────────────────────────────────────────
+
+class ProzessDesignerPositionUpdate(BaseModel):
+    pos_x: float
+    pos_y: float
+
+
+# ─────────────────────────────────────────
 # Workflow Vorlage
 # ─────────────────────────────────────────
 
@@ -608,6 +651,9 @@ class WorkflowVorlageItemOut(WorkflowVorlageItemBase):
     id: int
     vorlage_id: int
     phase_id: Optional[int] = None
+    pos_x: float = 0.0
+    pos_y: float = 0.0
+    checklisten: List["ProzessSchrittChecklistItemOut"] = []
 
     model_config = {"from_attributes": True}
 
@@ -1520,3 +1566,15 @@ class WorkflowItemMitHerkunftOut(WorkflowItemOut):
 class WorkflowInstanzMitHerkunftOut(WorkflowInstanzOut):
     items: List[WorkflowItemMitHerkunftOut] = []
     global_events: List[GlobalEventOut] = []
+
+
+# ─────────────────────────────────────────
+# Prozessdesigner: Full graph response
+# ─────────────────────────────────────────
+
+class ProzessDesignerGraph(BaseModel):
+    vorlage_id: int
+    vorlage_name: str
+    nodes: List[WorkflowVorlageItemOut]
+    edges: List[WorkflowVorlageItemDependencyOut]
+    phasen: List[WorkflowPhaseOut]

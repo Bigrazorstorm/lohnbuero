@@ -260,4 +260,33 @@ def run_migrations():
                 ALTER TABLE workflow_items ADD COLUMN blockierung_seit DATETIME
             """))
 
+        # ═══════════════════════════════════════════════════════════════
+        # v2.2 - Prozessdesigner: canvas positions & step checklists
+        # ═══════════════════════════════════════════════════════════════
+
+        # workflow_vorlage_items – visual canvas positions for Prozessdesigner
+        vli_cols = {col['name'] for col in inspector.get_columns('workflow_vorlage_items')}
+        if "pos_x" not in vli_cols:
+            conn.execute(text("ALTER TABLE workflow_vorlage_items ADD COLUMN pos_x REAL DEFAULT 0.0"))
+        if "pos_y" not in vli_cols:
+            conn.execute(text("ALTER TABLE workflow_vorlage_items ADD COLUMN pos_y REAL DEFAULT 0.0"))
+
+        # prozess_schritt_checklisten – checklist items per process step
+        tables = inspector.get_table_names()
+        if "prozess_schritt_checklisten" not in tables:
+            conn.execute(text("""
+                CREATE TABLE prozess_schritt_checklisten (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    vorlage_item_id INTEGER NOT NULL,
+                    position INTEGER NOT NULL DEFAULT 1,
+                    titel TEXT NOT NULL,
+                    beschreibung TEXT,
+                    ist_pflicht BOOLEAN DEFAULT TRUE,
+                    ist_aktiv BOOLEAN DEFAULT TRUE,
+                    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (vorlage_item_id) REFERENCES workflow_vorlage_items(id) ON DELETE CASCADE
+                )
+            """))
+
         conn.commit()

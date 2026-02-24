@@ -357,6 +357,11 @@ export interface WorkflowVorlageItem {
   erfordert_dokument: boolean
   erfordert_pruefung: boolean
   phase_id?: number // NEW (v2.1): Phase assignment
+  schritttyp?: string
+  standard_punkte: number
+  pos_x: number // Prozessdesigner: canvas X position
+  pos_y: number // Prozessdesigner: canvas Y position
+  checklisten: ProzessSchrittChecklistItem[] // Prozessdesigner: monthly checklists
 }
 
 // NEW (v2.1): Workflow Phase for organized workflow structure
@@ -739,4 +744,41 @@ export interface WorkflowItemMitHerkunft extends WorkflowItem {
 export interface WorkflowInstanzMitHerkunft extends WorkflowInstanz {
   items: WorkflowItemMitHerkunft[]
   global_events: GlobalEvent[]
+}
+
+// ── Prozessdesigner ──────────────────────────────────────────
+export interface ProzessSchrittChecklistItem {
+  id: number
+  vorlage_item_id: number
+  position: number
+  titel: string
+  beschreibung?: string
+  ist_pflicht: boolean
+  ist_aktiv: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface ProzessDesignerNode extends WorkflowVorlageItem {
+  pos_x: number
+  pos_y: number
+  checklisten: ProzessSchrittChecklistItem[]
+}
+
+export interface ProzessDesignerEdge {
+  id: number
+  vorlage_id: number
+  source_item_id: number
+  target_item_id: number
+  typ: WorkflowItemDependencyTyp
+  beschreibung?: string
+  created_at: string
+}
+
+export interface ProzessDesignerGraph {
+  vorlage_id: number
+  vorlage_name: string
+  nodes: ProzessDesignerNode[]
+  edges: ProzessDesignerEdge[]
+  phasen: WorkflowPhase[]
 }

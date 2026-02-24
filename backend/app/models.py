@@ -694,10 +694,15 @@ class WorkflowVorlageItem(Base):
     # JSON: { "kritisches_ticket_bricht": true, "blockt_abschluss": true }
     blockier_konfiguration = Column(Text, nullable=True)
 
+    # Prozessdesigner: visual canvas position
+    pos_x = Column(Float, default=0.0)
+    pos_y = Column(Float, default=0.0)
+
     vorlage = relationship("WorkflowVorlage", back_populates="items")
     phase = relationship("WorkflowPhase", back_populates="items")
     dependencies_from = relationship("WorkflowVorlageItemDependency", foreign_keys="WorkflowVorlageItemDependency.source_item_id", back_populates="source_item")
     dependencies_to = relationship("WorkflowVorlageItemDependency", foreign_keys="WorkflowVorlageItemDependency.target_item_id", back_populates="target_item")
+    checklisten = relationship("ProzessSchrittChecklistItem", back_populates="vorlage_item", cascade="all, delete-orphan", order_by="ProzessSchrittChecklistItem.position")
 
 
 class WorkflowVorlageItemDependency(Base):
@@ -720,6 +725,30 @@ class WorkflowVorlageItemDependency(Base):
     vorlage = relationship("WorkflowVorlage", back_populates="item_dependencies")
     source_item = relationship("WorkflowVorlageItem", foreign_keys=[source_item_id], back_populates="dependencies_from")
     target_item = relationship("WorkflowVorlageItem", foreign_keys=[target_item_id], back_populates="dependencies_to")
+
+
+# ─────────────────────────────────────────
+# Prozessdesigner: Checklist items per step
+# ─────────────────────────────────────────
+
+class ProzessSchrittChecklistItem(Base):
+    """
+    Checklisten-Einträge für einen einzelnen Prozessschritt (WorkflowVorlageItem).
+    Werden monatlich beim Abarbeiten des Schritts durchgegangen.
+    """
+    __tablename__ = "prozess_schritt_checklisten"
+
+    id = Column(Integer, primary_key=True, index=True)
+    vorlage_item_id = Column(Integer, ForeignKey("workflow_vorlage_items.id"), nullable=False)
+    position = Column(Integer, nullable=False, default=1)
+    titel = Column(String(255), nullable=False)
+    beschreibung = Column(Text, nullable=True)
+    ist_pflicht = Column(Boolean, default=True)
+    ist_aktiv = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    vorlage_item = relationship("WorkflowVorlageItem", back_populates="checklisten")
 
 
 # ─────────────────────────────────────────
