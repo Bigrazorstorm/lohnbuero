@@ -1,9 +1,9 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState } from 'react'
-import { Plus, FileText, ChevronDown, ChevronUp, Trash2 } from 'lucide-react'
+import { Plus, FileText, ChevronDown, ChevronUp, Trash2, Star } from 'lucide-react'
 import toast from 'react-hot-toast'
 import { workflowsApi } from '../api/client'
-import type { WorkflowVorlage } from '../types'
+import type { WorkflowVorlage, WorkflowVorlageItem } from '../types'
 
 export default function Vorlagen() {
   const qc = useQueryClient()
@@ -33,6 +33,24 @@ export default function Vorlagen() {
     },
     onError: () => toast.error('Fehler'),
   })
+
+  const updateItemMutation = useMutation({
+    mutationFn: ({ vorlageId, itemId, data }: { vorlageId: number; itemId: number; data: unknown }) =>
+      workflowsApi.updateVorlageItem(vorlageId, itemId, data),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['vorlagen'] })
+      toast.success('Schritt aktualisiert')
+    },
+    onError: () => toast.error('Fehler beim Aktualisieren'),
+  })
+
+  const toggleKernprozess = (vorlageId: number, item: WorkflowVorlageItem) => {
+    updateItemMutation.mutate({
+      vorlageId,
+      itemId: item.id,
+      data: { ist_kernprozess: !item.ist_kernprozess },
+    })
+  }
 
   const addItem = () => setItems(prev => [
     ...prev,
@@ -189,20 +207,38 @@ export default function Vorlagen() {
               </div>
 
               {expanded === v.id && (
-                <div className="mt-4 space-y-1 border-t pt-4">
+                <div className="mt-4 border-t pt-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Prozessschritte</p>
+                    <p className="text-xs text-gray-400">Auf <Star size={10} className="inline" /> klicken zum Setzen als Kernprozess</p>
+                  </div>
+                  <div className="space-y-1">
                   {v.items.map((item) => (
-                    <div key={item.id} className="flex items-center gap-3 text-sm py-1.5">
+                    <div key={item.id} className={`flex items-center gap-3 text-sm py-1.5 rounded-lg px-2 ${item.ist_kernprozess ? 'bg-amber-50 border border-amber-100' : ''}`}>
                       <span className="w-6 h-6 rounded-full bg-gray-100 text-gray-600 text-xs font-mono flex items-center justify-center flex-shrink-0">
                         {item.position}
                       </span>
                       <span className="flex-1 text-gray-800">{item.titel}</span>
                       <span className="text-xs text-gray-400">+{item.faellig_offset_tage} Tage</span>
-                      {item.ist_kernprozess && <span className="badge bg-amber-100 text-amber-700 text-xs">Kernprozess</span>}
                       {item.ist_optional_pro_mandant && <span className="badge bg-blue-100 text-blue-700 text-xs">Mandanten-Option</span>}
                       {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
                       {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); toggleKernprozess(v.id, item) }}
+                        disabled={updateItemMutation.isPending}
+                        title={item.ist_kernprozess ? 'Als Kernprozess entfernen' : 'Als Kernprozess markieren'}
+                        className={`flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors ${
+                          item.ist_kernprozess
+                            ? 'bg-amber-500 text-white hover:bg-amber-600'
+                            : 'bg-gray-100 text-gray-500 hover:bg-amber-100 hover:text-amber-700'
+                        }`}
+                      >
+                        <Star size={11} className={item.ist_kernprozess ? 'fill-current' : ''} />
+                        {item.ist_kernprozess ? 'Kernprozess' : 'Kern?'}
+                      </button>
                     </div>
                   ))}
+                  </div>
                 </div>
               )}
             </div>

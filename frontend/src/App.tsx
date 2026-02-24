@@ -17,6 +17,7 @@ import AdminMailConfig from './pages/AdminMailConfig'
 import { AdminGlobalEvents } from './pages/AdminGlobalEvents'
 import { AdminBranchenSchritte } from './pages/AdminBranchenSchritte'
 import { AdminTenants } from './pages/AdminTenants'
+import { ProzessDesigner } from './pages/ProzessDesigner'
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useAuthStore()
@@ -106,6 +107,14 @@ export default function App() {
           element={
             <RequireAdmin>
               <AdminTenants />
+            </RequireAdmin>
+          }
+        />
+        <Route
+          path="admin/prozess-designer"
+          element={
+            <RequireAdmin>
+              <ProzessDesigner />
             </RequireAdmin>
           }
         />

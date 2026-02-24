@@ -613,6 +613,7 @@ class WorkflowService:
                 faellig_datum=deadline,
                 sla_warnung_ab=sla_warning,
                 ist_pflicht=vorlage_item.ist_pflicht,
+                ist_kernprozess=vorlage_item.ist_kernprozess,
                 erfordert_dokument=vorlage_item.erfordert_dokument,
                 erfordert_pruefung=vorlage_item.erfordert_pruefung,
                 fristart_referenz=vorlage_item.fristart_referenz,

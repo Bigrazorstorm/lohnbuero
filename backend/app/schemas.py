@@ -581,6 +581,49 @@ class WorkflowVorlageItemDependencyOut(WorkflowVorlageItemDependencyBase):
 
 
 # ─────────────────────────────────────────
+# Prozessdesigner: Checklist items per step
+# (defined here so WorkflowVorlageItemOut can reference it)
+# ─────────────────────────────────────────
+
+class ProzessSchrittChecklistItemBase(BaseModel):
+    titel: str
+    beschreibung: Optional[str] = None
+    position: int = 1
+    ist_pflicht: bool = True
+    ist_aktiv: bool = True
+
+
+class ProzessSchrittChecklistItemCreate(ProzessSchrittChecklistItemBase):
+    pass
+
+
+class ProzessSchrittChecklistItemUpdate(BaseModel):
+    titel: Optional[str] = None
+    beschreibung: Optional[str] = None
+    position: Optional[int] = None
+    ist_pflicht: Optional[bool] = None
+    ist_aktiv: Optional[bool] = None
+
+
+class ProzessSchrittChecklistItemOut(ProzessSchrittChecklistItemBase):
+    id: int
+    vorlage_item_id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ─────────────────────────────────────────
+# Prozessdesigner: Node position update
+# ─────────────────────────────────────────
+
+class ProzessDesignerPositionUpdate(BaseModel):
+    pos_x: float
+    pos_y: float
+
+
+# ─────────────────────────────────────────
 # Workflow Vorlage
 # ─────────────────────────────────────────
 
@@ -604,10 +647,28 @@ class WorkflowVorlageItemCreate(WorkflowVorlageItemBase):
     pass
 
 
+class WorkflowVorlageItemUpdate(BaseModel):
+    titel: Optional[str] = None
+    beschreibung: Optional[str] = None
+    position: Optional[int] = None
+    verantwortlich_rolle: Optional[UserRole] = None
+    faellig_offset_tage: Optional[int] = None
+    ist_kernprozess: Optional[bool] = None
+    ist_pflicht: Optional[bool] = None
+    ist_optional_pro_mandant: Optional[bool] = None
+    erfordert_dokument: Optional[bool] = None
+    erfordert_pruefung: Optional[bool] = None
+    phase_id: Optional[int] = None
+    standard_punkte: Optional[float] = None
+
+
 class WorkflowVorlageItemOut(WorkflowVorlageItemBase):
     id: int
     vorlage_id: int
     phase_id: Optional[int] = None
+    pos_x: float = 0.0
+    pos_y: float = 0.0
+    checklisten: List["ProzessSchrittChecklistItemOut"] = []
 
     model_config = {"from_attributes": True}
 
@@ -697,6 +758,7 @@ class WorkflowItemOut(BaseModel):
     faellig_datum: Optional[datetime] = None
     sla_warnung_ab: Optional[datetime] = None
     ist_pflicht: bool
+    ist_kernprozess: bool = False
     erfordert_dokument: bool
     erfordert_pruefung: bool
     fristart_referenz: Optional[str] = None
@@ -1520,3 +1582,15 @@ class WorkflowItemMitHerkunftOut(WorkflowItemOut):
 class WorkflowInstanzMitHerkunftOut(WorkflowInstanzOut):
     items: List[WorkflowItemMitHerkunftOut] = []
     global_events: List[GlobalEventOut] = []
+
+
+# ─────────────────────────────────────────
+# Prozessdesigner: Full graph response
+# ─────────────────────────────────────────
+
+class ProzessDesignerGraph(BaseModel):
+    vorlage_id: int
+    vorlage_name: str
+    nodes: List[WorkflowVorlageItemOut]
+    edges: List[WorkflowVorlageItemDependencyOut]
+    phasen: List[WorkflowPhaseOut]
