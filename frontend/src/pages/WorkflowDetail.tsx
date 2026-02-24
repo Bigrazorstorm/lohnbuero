@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Check, Clock, AlertCircle, History } from 'lucide-react'
+import { ArrowLeft, Check, Clock, AlertCircle, History, List, GitBranch } from 'lucide-react'
 import { format } from 'date-fns'
 import { de } from 'date-fns/locale'
 import toast from 'react-hot-toast'
@@ -11,6 +11,7 @@ import Ampel from '../components/Ampel'
 import { WorkflowStatusBadge, ChecklistStatusBadge } from '../components/StatusBadge'
 import { useAuthStore } from '../store/auth'
 import { WorkflowItemMitHerkunft } from '../types'
+import WorkflowFlowchart from '../components/WorkflowFlowchart'
 
 const PROCESS_STEPS = [
   { key: 'unterlagen_eingegangen_am', vonKey: 'unterlagen_eingegangen_von', faelligKey: 'unterlagen_faellig', label: 'Unterlagen eingegangen' },
@@ -27,6 +28,7 @@ export default function WorkflowDetail() {
   const navigate = useNavigate()
   const qc = useQueryClient()
   const { user } = useAuthStore()
+  const [viewMode, setViewMode] = useState<'liste' | 'flowchart'>('flowchart')
 
   const { data: wf, isLoading } = useQuery<WorkflowInstanz>({
     queryKey: ['workflow', id],
@@ -122,6 +124,29 @@ export default function WorkflowDetail() {
             <option value="abgeschlossen">Abgeschlossen</option>
           </select>
         )}
+        {/* View mode toggle */}
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm">
+          <button
+            onClick={() => setViewMode('flowchart')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 transition-colors ${
+              viewMode === 'flowchart' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+            title="Flowchart-Ansicht"
+          >
+            <GitBranch size={15} />
+            Flowchart
+          </button>
+          <button
+            onClick={() => setViewMode('liste')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 border-l border-gray-200 transition-colors ${
+              viewMode === 'liste' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'
+            }`}
+            title="Listen-Ansicht"
+          >
+            <List size={15} />
+            Liste
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-3 gap-5">
@@ -138,97 +163,108 @@ export default function WorkflowDetail() {
             </div>
           </div>
 
-          {/* Process Steps */}
-          <div className="card space-y-2 py-4">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Prozessablauf & Checkliste</h2>
-            
-            <div className="space-y-2">
-              {PROCESS_STEPS.map((step, idx) => {
-                const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
-                const erledigtVon = wf[step.vonKey as keyof WorkflowInstanz] as { full_name: string } | undefined
-                const faellig = wf[step.faelligKey as keyof WorkflowInstanz] as string | undefined
-                const isDone = !!value
-                const isOverdue = faellig && !isDone && new Date(faellig) < new Date()
-                return (
-                  <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border ${isDone ? 'border-green-100 bg-green-50' : isOverdue ? 'border-red-100 bg-red-50' : 'border-amber-100 bg-amber-50'}`}>
-                    <button
-                      disabled={isMandant || workflowMutation.isPending}
-                      onClick={() => toggleProcessStep(step.key, value)}
-                      className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${isDone ? 'bg-green-500 border-green-500' : 'border-amber-300 hover:border-green-400'} ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
-                    >
-                      {isDone && <Check size={12} className="text-white" />}
-                    </button>
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-sm font-semibold ${isDone ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{step.label}</span>
-                        <span className="badge bg-amber-100 text-amber-700 text-xs">Kernprozess</span>
-                      </div>
-                      <div className="flex items-center gap-3 mt-1">
-                        {isDone ? (
-                          <p className="text-xs text-green-600">✓ {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })} {erledigtVon && `· ${erledigtVon.full_name}`}</p>
-                        ) : faellig ? (
-                          <p className={`text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>Fällig: {format(new Date(faellig), 'dd.MM.yyyy', { locale: de })}</p>
-                        ) : null}
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-
-              {wf.items.length > 0 && <div className="my-2 border-t border-gray-200" />}
-
-              {wf.items.length === 0 ? (
-                <p className="text-sm text-gray-400 text-center py-4">Keine zusätzlichen Checklisten-Einträge</p>
-              ) : (
-                wf.items.map((item) => {
-                  const isOverdue = item.faellig_datum && new Date(item.faellig_datum) < new Date() && item.status !== 'erledigt'
+          {/* Flowchart or List view */}
+          {viewMode === 'flowchart' ? (
+            <WorkflowFlowchart
+              wf={wf}
+              isMandant={isMandant}
+              isPending={workflowMutation.isPending || itemMutation.isPending}
+              onToggleProcessStep={toggleProcessStep}
+              onToggleItem={toggleItem}
+            />
+          ) : (
+            /* List view (original) */
+            <div className="card space-y-2 py-4">
+              <h2 className="text-base font-semibold text-gray-900 mb-4">Prozessablauf & Checkliste</h2>
+              
+              <div className="space-y-2">
+                {PROCESS_STEPS.map((step, idx) => {
+                  const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
+                  const erledigtVon = wf[step.vonKey as keyof WorkflowInstanz] as { full_name: string } | undefined
+                  const faellig = wf[step.faelligKey as keyof WorkflowInstanz] as string | undefined
+                  const isDone = !!value
+                  const isOverdue = faellig && !isDone && new Date(faellig) < new Date()
                   return (
-                    <div key={item.id} className={`flex items-start gap-3 p-3 rounded-lg border ${item.status === 'erledigt' ? 'border-green-100 bg-green-50' : isOverdue ? 'border-red-100 bg-red-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                    <div key={idx} className={`flex items-start gap-3 p-3 rounded-lg border ${isDone ? 'border-green-100 bg-green-50' : isOverdue ? 'border-red-100 bg-red-50' : 'border-amber-100 bg-amber-50'}`}>
                       <button
-                        disabled={isMandant || itemMutation.isPending}
-                        onClick={() => toggleItem(item.id, item.status)}
-                        className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center ${item.status === 'erledigt' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-400'} ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                        disabled={isMandant || workflowMutation.isPending}
+                        onClick={() => toggleProcessStep(step.key, value)}
+                        className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center transition-colors ${isDone ? 'bg-green-500 border-green-500' : 'border-amber-300 hover:border-green-400'} ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
                       >
-                        {item.status === 'erledigt' && <Check size={12} />}
+                        {isDone && <Check size={12} className="text-white" />}
                       </button>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className={`text-sm font-medium ${item.status === 'erledigt' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{item.titel}</span>
-                          {item.herkunft && (
-                            <span className={`badge text-xs ${
-                              item.herkunft.ebene === 'standard' ? 'bg-blue-100 text-blue-600' :
-                              item.herkunft.ebene === 'branche' ? 'bg-purple-100 text-purple-600' :
-                              item.herkunft.ebene === 'mandant' ? 'bg-green-100 text-green-600' :
-                              'bg-yellow-100 text-yellow-600'
-                            }`}>
-                              {item.herkunft.ebene === 'standard' ? 'Standard' :
-                               item.herkunft.ebene === 'branche' ? 'Branche' :
-                               item.herkunft.ebene === 'mandant' ? 'Mandant-spezifisch' :
-                               'Global Event'} {item.herkunft.source_name && `· ${item.herkunft.source_name}`}
-                            </span>
-                          )}
-                          {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
-                          {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
-                          {item.erfordert_dokument && <span className="badge bg-blue-100 text-blue-600 text-xs">Dokument</span>}
-                          {isOverdue && <AlertCircle size={14} className="text-red-500" />}
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className={`text-sm font-semibold ${isDone ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{step.label}</span>
+                          <span className="badge bg-amber-100 text-amber-700 text-xs">Kernprozess</span>
                         </div>
-                        {item.beschreibung && <p className="text-xs text-gray-500 mt-0.5">{item.beschreibung}</p>}
                         <div className="flex items-center gap-3 mt-1">
-                          {item.faellig_datum && (
-                            <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
-                              <Clock size={11} />Fällig: {format(new Date(item.faellig_datum), 'dd.MM.yyyy', { locale: de })}
-                            </span>
-                          )}
-                          {item.erledigt_von && <span className="text-xs text-gray-400">Erledigt von {item.erledigt_von.full_name}{item.erledigt_am && ` · ${format(new Date(item.erledigt_am), 'dd.MM.', { locale: de })}`}</span>}
+                          {isDone ? (
+                            <p className="text-xs text-green-600">✓ {format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })} {erledigtVon && `· ${erledigtVon.full_name}`}</p>
+                          ) : faellig ? (
+                            <p className={`text-xs ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>Fällig: {format(new Date(faellig), 'dd.MM.yyyy', { locale: de })}</p>
+                          ) : null}
                         </div>
                       </div>
-                      <ChecklistStatusBadge status={item.status} />
                     </div>
                   )
-                })
-              )}
+                })}
+
+                {wf.items.length > 0 && <div className="my-2 border-t border-gray-200" />}
+
+                {wf.items.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-4">Keine zusätzlichen Checklisten-Einträge</p>
+                ) : (
+                  wf.items.map((item) => {
+                    const isOverdue = item.faellig_datum && new Date(item.faellig_datum) < new Date() && item.status !== 'erledigt'
+                    return (
+                      <div key={item.id} className={`flex items-start gap-3 p-3 rounded-lg border ${item.status === 'erledigt' ? 'border-green-100 bg-green-50' : isOverdue ? 'border-red-100 bg-red-50' : 'border-gray-100 hover:border-gray-200'}`}>
+                        <button
+                          disabled={isMandant || itemMutation.isPending}
+                          onClick={() => toggleItem(item.id, item.status)}
+                          className={`mt-0.5 w-5 h-5 rounded flex-shrink-0 border-2 flex items-center justify-center ${item.status === 'erledigt' ? 'bg-green-500 border-green-500 text-white' : 'border-gray-300 hover:border-green-400'} ${isMandant ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}
+                        >
+                          {item.status === 'erledigt' && <Check size={12} />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-sm font-medium ${item.status === 'erledigt' ? 'text-gray-500 line-through' : 'text-gray-900'}`}>{item.titel}</span>
+                            {item.herkunft && (
+                              <span className={`badge text-xs ${
+                                item.herkunft.ebene === 'standard' ? 'bg-blue-100 text-blue-600' :
+                                item.herkunft.ebene === 'branche' ? 'bg-purple-100 text-purple-600' :
+                                item.herkunft.ebene === 'mandant' ? 'bg-green-100 text-green-600' :
+                                'bg-yellow-100 text-yellow-600'
+                              }`}>
+                                {item.herkunft.ebene === 'standard' ? 'Standard' :
+                                 item.herkunft.ebene === 'branche' ? 'Branche' :
+                                 item.herkunft.ebene === 'mandant' ? 'Mandant-spezifisch' :
+                                 'Global Event'} {item.herkunft.source_name && `· ${item.herkunft.source_name}`}
+                              </span>
+                            )}
+                            {!item.ist_pflicht && <span className="badge bg-gray-100 text-gray-500 text-xs">Optional</span>}
+                            {item.erfordert_pruefung && <span className="badge bg-purple-100 text-purple-600 text-xs">4-Augen</span>}
+                            {item.erfordert_dokument && <span className="badge bg-blue-100 text-blue-600 text-xs">Dokument</span>}
+                            {isOverdue && <AlertCircle size={14} className="text-red-500" />}
+                          </div>
+                          {item.beschreibung && <p className="text-xs text-gray-500 mt-0.5">{item.beschreibung}</p>}
+                          <div className="flex items-center gap-3 mt-1">
+                            {item.faellig_datum && (
+                              <span className={`text-xs flex items-center gap-1 ${isOverdue ? 'text-red-600 font-medium' : 'text-gray-400'}`}>
+                                <Clock size={11} />Fällig: {format(new Date(item.faellig_datum), 'dd.MM.yyyy', { locale: de })}
+                              </span>
+                            )}
+                            {item.erledigt_von && <span className="text-xs text-gray-400">Erledigt von {item.erledigt_von.full_name}{item.erledigt_am && ` · ${format(new Date(item.erledigt_am), 'dd.MM.', { locale: de })}`}</span>}
+                          </div>
+                        </div>
+                        <ChecklistStatusBadge status={item.status} />
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Sidebar */}
