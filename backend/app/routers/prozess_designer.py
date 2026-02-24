@@ -7,7 +7,6 @@ Ermöglicht:
 - Verwaltung von Checklisten-Einträgen pro Prozessschritt
 - Verwaltung von Abhängigkeiten (Kanten) zwischen Prozessschritten
 """
-from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -319,7 +318,6 @@ def update_checklist_item(
 
     for key, value in data.model_dump(exclude_unset=True).items():
         setattr(checklist_item, key, value)
-    checklist_item.updated_at = datetime.utcnow()
 
     db.commit()
     db.refresh(checklist_item)
