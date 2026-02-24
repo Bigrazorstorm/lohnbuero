@@ -674,6 +674,7 @@ class WorkflowVorlageItem(Base):
     faellig_offset_tage = Column(Integer, default=0)  # days after month start
     ist_pflicht = Column(Boolean, default=True)
     ist_optional_pro_mandant = Column(Boolean, default=False)  # can be activated per mandant
+    ist_kernprozess = Column(Boolean, default=False)  # marks this item as a kernel process step
     
     # Dokumentation & Prüfung
     erfordert_dokument = Column(Boolean, default=False)
@@ -862,6 +863,7 @@ class WorkflowItem(Base):
     
     # Attributes
     ist_pflicht = Column(Boolean, default=True)
+    ist_kernprozess = Column(Boolean, default=False)  # kernel process step (copied from template)
     erfordert_dokument = Column(Boolean, default=False)
     erfordert_pruefung = Column(Boolean, default=False)  # 4-eyes principle
     fristart_referenz = Column(String(100), nullable=True)  # links to deadline rule

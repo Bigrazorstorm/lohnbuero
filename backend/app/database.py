@@ -289,4 +289,22 @@ def run_migrations():
                 )
             """))
 
+        # ═══════════════════════════════════════════════════════════════
+        # v2.3 - Definierbare Kernprozesse
+        # ═══════════════════════════════════════════════════════════════
+
+        # workflow_vorlage_items – ist_kernprozess flag
+        vli_cols = {col['name'] for col in inspector.get_columns('workflow_vorlage_items')}
+        if "ist_kernprozess" not in vli_cols:
+            conn.execute(text(
+                "ALTER TABLE workflow_vorlage_items ADD COLUMN ist_kernprozess BOOLEAN DEFAULT FALSE"
+            ))
+
+        # workflow_items – ist_kernprozess flag (copied from template on creation)
+        item_cols = {col['name'] for col in inspector.get_columns('workflow_items')}
+        if "ist_kernprozess" not in item_cols:
+            conn.execute(text(
+                "ALTER TABLE workflow_items ADD COLUMN ist_kernprozess BOOLEAN DEFAULT FALSE"
+            ))
+
         conn.commit()

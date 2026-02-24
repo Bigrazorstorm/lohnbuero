@@ -209,45 +209,86 @@ export default function WorkflowFlowchart({
   onToggleProcessStep,
   onToggleItem,
 }: WorkflowFlowchartProps) {
-  // ── Kernel Process Flow ──────────────────
-  const kernelNodes = PROCESS_STEPS.map((step, idx) => {
-    const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
-    const erledigtVon = wf[step.vonKey as keyof WorkflowInstanz] as { full_name: string } | undefined
-    const faellig = wf[step.faelligKey as keyof WorkflowInstanz] as string | undefined
-    const isDone = !!value
-    const isOverdue = !!faellig && !isDone && new Date(faellig) < new Date()
-
-    const dateLabel = isDone
-      ? format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })
-      : faellig
-      ? format(new Date(faellig), 'dd.MM.yyyy', { locale: de })
-      : undefined
-
-    return (
-      <span key={step.key} className="flex items-center">
-        <FlowNode
-          index={idx}
-          label={step.label}
-          isDone={isDone}
-          isOverdue={isOverdue}
-          isBlocked={false}
-          dateLabel={dateLabel}
-          byLabel={erledigtVon?.full_name}
-          badge="Kernprozess"
-          badgeColor="bg-amber-100 text-amber-700"
-          disabled={isMandant || isPending}
-          onClick={() => onToggleProcessStep(step.key, value)}
-        />
-        {idx < PROCESS_STEPS.length - 1 && <FlowArrow />}
-      </span>
-    )
-  })
-
-  // ── Checklist Item Flow ──────────────────
   const sortedItems = [...wf.items].sort((a, b) => a.position - b.position)
 
-  // Group items that have the same ebene for visual separation
-  const checklistNodes = sortedItems.map((item, idx) => {
+  // Check whether the template defines custom kernel process items
+  const templateKernelItems = sortedItems.filter(item => item.ist_kernprozess)
+  const useTemplateKernel = templateKernelItems.length > 0
+
+  // ── Kernel Process Flow ──────────────────
+  // If the template has items marked as kernel process, use those.
+  // Otherwise fall back to the hardcoded PROCESS_STEPS (legacy behavior).
+  const kernelNodes = useTemplateKernel
+    ? templateKernelItems.map((item, idx) => {
+        const isDone = item.status === 'erledigt'
+        const isBlocked = !!(item.blockiert_von_item_ids && item.blockiert_von_item_ids.length > 0)
+        const isOverdue = !!(item.faellig_datum && new Date(item.faellig_datum) < new Date() && !isDone)
+
+        const dateLabel = isDone && item.erledigt_am
+          ? format(new Date(item.erledigt_am), 'dd.MM.yyyy HH:mm', { locale: de })
+          : item.faellig_datum
+          ? format(new Date(item.faellig_datum), 'dd.MM.yyyy', { locale: de })
+          : undefined
+
+        return (
+          <span key={item.id} className="flex items-center">
+            <FlowNode
+              index={idx}
+              label={item.titel}
+              isDone={isDone}
+              isOverdue={isOverdue}
+              isBlocked={isBlocked}
+              dateLabel={dateLabel}
+              byLabel={item.erledigt_von?.full_name}
+              badge="Kernprozess"
+              badgeColor="bg-amber-100 text-amber-700"
+              isOptional={!item.ist_pflicht}
+              disabled={isMandant || isPending}
+              onClick={() => onToggleItem(item.id, item.status)}
+            />
+            {idx < templateKernelItems.length - 1 && <FlowArrow />}
+          </span>
+        )
+      })
+    : PROCESS_STEPS.map((step, idx) => {
+        const value = wf[step.key as keyof WorkflowInstanz] as string | undefined
+        const erledigtVon = wf[step.vonKey as keyof WorkflowInstanz] as { full_name: string } | undefined
+        const faellig = wf[step.faelligKey as keyof WorkflowInstanz] as string | undefined
+        const isDone = !!value
+        const isOverdue = !!faellig && !isDone && new Date(faellig) < new Date()
+
+        const dateLabel = isDone
+          ? format(new Date(value!), 'dd.MM.yyyy HH:mm', { locale: de })
+          : faellig
+          ? format(new Date(faellig), 'dd.MM.yyyy', { locale: de })
+          : undefined
+
+        return (
+          <span key={step.key} className="flex items-center">
+            <FlowNode
+              index={idx}
+              label={step.label}
+              isDone={isDone}
+              isOverdue={isOverdue}
+              isBlocked={false}
+              dateLabel={dateLabel}
+              byLabel={erledigtVon?.full_name}
+              badge="Kernprozess"
+              badgeColor="bg-amber-100 text-amber-700"
+              disabled={isMandant || isPending}
+              onClick={() => onToggleProcessStep(step.key, value)}
+            />
+            {idx < PROCESS_STEPS.length - 1 && <FlowArrow />}
+          </span>
+        )
+      })
+
+  // ── Non-kernel Checklist Items Flow ──────────────────
+  const nonKernelItems = useTemplateKernel
+    ? sortedItems.filter(item => !item.ist_kernprozess)
+    : sortedItems
+
+  const checklistNodes = nonKernelItems.map((item, idx) => {
     const isDone = item.status === 'erledigt'
     const isBlocked = !!(item.blockiert_von_item_ids && item.blockiert_von_item_ids.length > 0)
     const isOverdue = !!(item.faellig_datum && new Date(item.faellig_datum) < new Date() && !isDone)
@@ -284,10 +325,16 @@ export default function WorkflowFlowchart({
           disabled={isMandant || isPending}
           onClick={() => onToggleItem(item.id, item.status)}
         />
-        {idx < sortedItems.length - 1 && <FlowArrow />}
+        {idx < nonKernelItems.length - 1 && <FlowArrow />}
       </span>
     )
   })
+
+  // Count completed kernel process steps
+  const kernelDoneCount = useTemplateKernel
+    ? templateKernelItems.filter(i => i.status === 'erledigt').length
+    : PROCESS_STEPS.filter(s => wf[s.key as keyof WorkflowInstanz]).length
+  const kernelTotal = useTemplateKernel ? templateKernelItems.length : PROCESS_STEPS.length
 
   return (
     <div className="space-y-4">
@@ -324,17 +371,17 @@ export default function WorkflowFlowchart({
       {/* Kernel Process Flow */}
       <FlowSection
         title="Kernprozess-Ablauf"
-        badge={`${PROCESS_STEPS.filter(s => wf[s.key as keyof WorkflowInstanz]).length} / ${PROCESS_STEPS.length} erledigt`}
+        badge={`${kernelDoneCount} / ${kernelTotal} erledigt`}
         badgeColor="bg-amber-100 text-amber-700"
       >
         {kernelNodes}
       </FlowSection>
 
-      {/* Checklist Item Flow */}
-      {sortedItems.length > 0 && (
+      {/* Non-kernel Checklist Item Flow */}
+      {nonKernelItems.length > 0 && (
         <FlowSection
-          title="Workflow-Schritte"
-          badge={`${sortedItems.filter(i => i.status === 'erledigt').length} / ${sortedItems.length} erledigt`}
+          title="Weitere Workflow-Schritte"
+          badge={`${nonKernelItems.filter(i => i.status === 'erledigt').length} / ${nonKernelItems.length} erledigt`}
           badgeColor="bg-blue-100 text-blue-700"
         >
           {checklistNodes}

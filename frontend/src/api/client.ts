@@ -65,6 +65,8 @@ export const workflowsApi = {
     api.post('/workflows/bulk-create-monthly', null, { params: { monat, jahr } }),
   listVorlagen: () => api.get('/workflows/vorlagen'),
   createVorlage: (data: unknown) => api.post('/workflows/vorlagen', data),
+  updateVorlageItem: (vorlageId: number, itemId: number, data: unknown) =>
+    api.patch(`/workflows/vorlagen/${vorlageId}/items/${itemId}`, data),
   
   // NEW (v2.1): Workflow Phasen
   listPhasen: (vorlageId: number) => api.get(`/workflows/vorlagen/${vorlageId}/phasen`),

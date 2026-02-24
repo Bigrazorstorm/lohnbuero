@@ -143,6 +143,7 @@ export interface WorkflowItem {
   verantwortlich_rolle?: UserRole
   faellig_datum?: string
   ist_pflicht: boolean
+  ist_kernprozess?: boolean
   erfordert_dokument: boolean
   erfordert_pruefung: boolean
   status: ChecklistItemStatus

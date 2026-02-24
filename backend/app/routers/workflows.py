@@ -21,6 +21,7 @@ from app.schemas import (
     WorkflowPhaseCreate, WorkflowPhaseOut, WorkflowPhaseUpdate,
     WorkflowVorlageItemDependencyCreate, WorkflowVorlageItemDependencyOut,
     WorkflowVorlageItemDependencyUpdate,
+    WorkflowVorlageItemOut, WorkflowVorlageItemUpdate,
 )
 from app.workflow_service import WorkflowService
 
@@ -91,6 +92,28 @@ def update_vorlage(
     db.commit()
     db.refresh(vorlage)
     return vorlage
+
+
+@router.patch("/vorlagen/{vorlage_id}/items/{item_id}", response_model=WorkflowVorlageItemOut)
+def update_vorlage_item(
+    vorlage_id: int,
+    item_id: int,
+    data: WorkflowVorlageItemUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin_or_teamleitung),
+):
+    """Update a workflow template item (e.g., toggle ist_kernprozess)."""
+    item = db.query(WorkflowVorlageItem).filter(
+        WorkflowVorlageItem.id == item_id,
+        WorkflowVorlageItem.vorlage_id == vorlage_id,
+    ).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Item nicht gefunden")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(item, k, v)
+    db.commit()
+    db.refresh(item)
+    return item
 
 
 # ─── Instanzen ───────────────────────────────────────────────

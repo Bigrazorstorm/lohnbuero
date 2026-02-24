@@ -89,9 +89,16 @@ export default function WorkflowDetail() {
   }
 
   const completedCount = wf.items.filter(i => i.status === 'erledigt').length
-  const completedProcessSteps = PROCESS_STEPS.filter(step => wf[step.key as keyof WorkflowInstanz]).length
-  const totalItems = PROCESS_STEPS.length + wf.items.length
-  const totalCompleted = completedProcessSteps + completedCount
+
+  // Use template-defined kernel process items if any are marked; otherwise use hardcoded PROCESS_STEPS
+  const templateKernelItems = wf.items.filter(i => i.ist_kernprozess)
+  const useTemplateKernel = templateKernelItems.length > 0
+  const completedProcessSteps = useTemplateKernel
+    ? templateKernelItems.filter(i => i.status === 'erledigt').length
+    : PROCESS_STEPS.filter(step => wf[step.key as keyof WorkflowInstanz]).length
+  const kernelStepCount = useTemplateKernel ? templateKernelItems.length : PROCESS_STEPS.length
+  const totalItems = kernelStepCount + (useTemplateKernel ? wf.items.filter(i => !i.ist_kernprozess).length : wf.items.length)
+  const totalCompleted = completedProcessSteps + (useTemplateKernel ? wf.items.filter(i => !i.ist_kernprozess && i.status === 'erledigt').length : completedCount)
 
   return (
     <div className="space-y-5">
@@ -273,10 +280,10 @@ export default function WorkflowDetail() {
             <h3 className="text-sm font-semibold text-gray-700 mb-3">Kernprozess-Status</h3>
             <div className="flex items-center justify-between">
               <span className="text-sm text-gray-600">Schritte abgeschlossen:</span>
-              <span className="text-lg font-bold text-amber-600">{completedProcessSteps} / {PROCESS_STEPS.length}</span>
+              <span className="text-lg font-bold text-amber-600">{completedProcessSteps} / {kernelStepCount}</span>
             </div>
             <div className="w-full h-2 bg-gray-200 rounded-full overflow-hidden mt-2">
-              <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.round((completedProcessSteps / PROCESS_STEPS.length) * 100)}%` }} />
+              <div className="h-full bg-amber-500 rounded-full" style={{ width: `${kernelStepCount > 0 ? Math.round((completedProcessSteps / kernelStepCount) * 100) : 0}%` }} />
             </div>
           </div>
 
